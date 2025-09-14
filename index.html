@@ -205,18 +205,6 @@
   }
   #btn-descargar-promo.hidden{ display:none !important; }
   .hidden{ display:none !important; }
-  .fixed-logo {
-    position: fixed;
-    bottom: 20px;
-    left: 20px;
-    width: 80px;
-    height: auto;
-    z-index: 9999;
-    pointer-events: none; /* evita interacción */
-    animation: spinY 6s linear infinite;
-    transform-style: preserve-3d;
-  }
-
   /* Botón de NOTIFICACIONES solo visible en app (standalone) */
   #btn-notifs {
     background:#ef4444; /* rojo inicial */
@@ -228,6 +216,19 @@
   @media (display-mode: standalone) {
     #btn-install { display:none !important; }   /* ocultar DESCARGAR cuando es app */
     #btn-notifs { display:block !important; }   /* mostrar NOTIFICACIONES en la app */
+  }
+
+  /* Logo fijo girando en esquina inferior izquierda */
+  .fixed-logo {
+    position: fixed;
+    bottom: 20px;
+    left: 20px;
+    width: 80px;
+    height: auto;
+    z-index: 9999;
+    pointer-events: none; /* evita interacción */
+    animation: spinY 6s linear infinite;
+    transform-style: preserve-3d;
   }
 
   @keyframes spinY {
@@ -267,7 +268,7 @@
     <a href="#ubicacion-cultos" class="navlink">Ubicación de los cultos</a>
     <a href="#proposito" class="navlink">Propósito</a>
     <a id="btn-notifs" class="navlink" href="#" style="display:none; font-weight:800;">NOTIFICACIONES</a>
-    <a id="btn-install" class="navlink" href="#" style="background:#7c3aed; color:#fff; border-color: rgba(0,0,0,.08); font-weight:800;">descargar web</a>
+    <a id="btn-install" class="navlink" href="#" style="background:#7c3aed; color:#fff; border-color: rgba(0,0,0,.08); font-weight:800;">Descargar Web</a>
   </nav>
 </header>
 
@@ -1090,6 +1091,65 @@ if (choice){
   });
 })();
 </script>
-</body>
+</script>
+<script>
+(function(){
+  const btn = document.getElementById('btn-install');
+  if (!btn) return;
+
+  const ua = navigator.userAgent || '';
+  const isIOS = /iPhone|iPad|iPod/i.test(ua);
+  const isSafari = /Safari/i.test(ua) && !/CriOS|FxiOS|OPiOS|EdgiOS/i.test(ua);
+  const isStandalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || (window.navigator.standalone === true);
+
+  // Ocultar si ya está instalada (defensa adicional al CSS)
+  if (isStandalone) { btn.style.display = 'none'; return; }
+
+  // Por defecto: mostrar el botón en la web
+  btn.style.display = '';
+
+  let deferredPrompt = null;
+
+  // ANDROID/CHROME: capturar beforeinstallprompt (seguirá usando prompt nativo)
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+  });
+
+  btn.addEventListener('click', async (ev) => {
+    ev.preventDefault();
+
+    // iOS: instrucciones (no se puede abrir el diálogo nativo por código)
+    if (isIOS && isSafari && !isStandalone) {
+      alert('PASO 1: PRESIONA LOS TRES PUNTOS (ABAJO DERECHA O ARRIBA DERECHA)\\n\\nPASO 2: SELECCIONA "COMPARTIR"\\n\\nPASO 3: DESLIZA HASTA VER "AGREGAR A INICIO"\\n\\nPASO 4: PRESIONA "AGREGAR"');
+      return;
+    }
+
+    // Android/desktop soportados
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        btn.style.display = 'none';
+      }
+      deferredPrompt = null;
+    } else {
+      // Instrucciones genéricas (incluye macOS Safari)
+      const isMac = /Macintosh|Mac OS X/i.test(ua);
+      if (isMac && isSafari) {
+        alert('En macOS (Safari):\\n\\nArchivo → Añadir al Dock\\n\\nLuego abre desde el Dock.');
+      } else {
+        alert('Si tu navegador soporta instalación, busca el ícono de “instalar” o usa el menú del navegador para “Añadir a pantalla de inicio / Instalar app”.');
+      }
+    }
+  });
+
+  // Cuando se instala, ocultar el botón
+  window.addEventListener('appinstalled', () => {
+    btn.style.display = 'none';
+  });
+})();
+</script>
 <img src="https://raw.githubusercontent.com/dla-tech/Media-privada/refs/heads/main/Logo%20de%20la%20iglesia%20PIPJM-2.png" alt="Logo fijo" class="fixed-logo">
+</body>
 </html>
