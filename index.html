@@ -1121,7 +1121,13 @@ if (choice){
 
     // iOS: instrucciones (no se puede abrir el diálogo nativo por código)
     if (isIOS && isSafari && !isStandalone) {
-      alert('PASO 1: PRESIONA LOS TRES PUNTOS (ABAJO DERECHA O ARRIBA DERECHA)\\n\\nPASO 2: SELECCIONA "COMPARTIR"\\n\\nPASO 3: DESLIZA HASTA VER "AGREGAR A INICIO"\\n\\nPASO 4: PRESIONA "AGREGAR"');
+      alert(`Paso 1: Presiona los tres puntos (abajo derecha o arriba derecha)
+
+Paso 2: Selecciona "Compartir"
+
+Paso 3: Desliza hasta ver "Agregar a inicio"
+
+Paso 4: Presiona "Agregar"`);
       return;
     }
 
@@ -1137,9 +1143,12 @@ if (choice){
       // Instrucciones genéricas (incluye macOS Safari)
       const isMac = /Macintosh|Mac OS X/i.test(ua);
       if (isMac && isSafari) {
-        alert('En macOS (Safari):\\n\\nArchivo → Añadir al Dock\\n\\nLuego abre desde el Dock.');
+        alert(`En macOS (Safari):
+
+1) Menú "Archivo" → "Añadir al Dock".
+2) Abre la app desde el Dock.`);
       } else {
-        alert('Si tu navegador soporta instalación, busca el ícono de “instalar” o usa el menú del navegador para “Añadir a pantalla de inicio / Instalar app”.');
+        alert(`Si tu navegador lo permite, usa el icono de "Instalar" o el menú del navegador para elegir: "Añadir a pantalla de inicio" / "Instalar app".`);
       }
     }
   });
