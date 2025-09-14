@@ -37,13 +37,16 @@
     opacity: 1;
     transition: opacity 2000ms ease;
   }
-  #loader img {
-    width: clamp(280px, 50vw, 460px);
-    max-width: min(2000vw, 980px);
-    height: auto;
-    filter: drop-shadow(0 6px 24px rgba(0,0,0,.35));
-    user-select: none;
-    -webkit-user-drag: none;
+  #loader img{
+    position:absolute;
+    inset:0;
+    width:100vw;
+    height:100vh;
+    object-fit:cover;
+    object-position:50% 45%;
+    z-index:1;
+    user-select:none;
+    -webkit-user-drag:none;
   }
   #loader.hide { opacity: 0; pointer-events: none; }
 
@@ -187,6 +190,49 @@
     width:100%;
     text-align:center;
   }
+  /* ===== Promo descarga ===== */
+  .promo-wrapper{ position: relative; display:block; text-align:center; }
+  .promo-wrapper img{
+    display:block; margin:0 auto;
+    max-width:100%; height:auto;
+    border-radius:12px; box-shadow:0 4px 14px rgba(0,0,0,.2)
+  }
+  .promo-overlay{ display:none !important; } /* ocultamos overlay dentro de la foto */
+  #btn-descargar-promo{
+    background:#ffd100; color:#000; font-weight:800; font-size:13.5px;
+    border:none; padding:8px 12px; border-radius:10px; cursor:pointer;
+    display:inline-block; margin:10px auto 0; box-shadow:0 2px 8px rgba(0,0,0,.25);
+  }
+  #btn-descargar-promo.hidden{ display:none !important; }
+  .hidden{ display:none !important; }
+  .fixed-logo {
+  /* Botón de NOTIFICACIONES solo visible en app (standalone) */
+  #btn-notifs {
+    background:#ef4444; /* rojo inicial */
+    color:#fff;
+    border-color: rgba(0,0,0,.08);
+  }
+  #btn-notifs.loading { opacity:.85; }
+  #btn-notifs.ok { background:#22c55e; } /* verde cuando activas */
+  @media (display-mode: standalone) {
+    #btn-install { display:none !important; }   /* ocultar DESCARGAR cuando es app */
+    #btn-notifs { display:block !important; }   /* mostrar NOTIFICACIONES en la app */
+  }
+    position: fixed;
+    bottom: 20px;
+    left: 20px;
+    width: 80px;
+    height: auto;
+    z-index: 9999;
+    pointer-events: none; /* evita interacción */
+    animation: spinY 6s linear infinite;
+    transform-style: preserve-3d;
+  }
+
+  @keyframes spinY {
+    0% { transform: rotateY(0deg); }
+    100% { transform: rotateY(360deg); }
+  }
 </style>
 <style id="preload-style">
   body > *:not(#loader) {
@@ -197,19 +243,17 @@
   // Bloquea scroll desde el primer paint
   document.documentElement.classList.add('loading');
 </script>
-<link rel="manifest" href="manifest.json">
+<link rel="manifest" href="./manifest.json">
 <meta name="theme-color" content="#0b1421">
+<link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png">
+<link rel="apple-touch-icon" sizes="512x512" href="icons/icon-512.png">
 </head>
 <body>
 
   <div id="loader" aria-label="Pantalla de carga">
-    <video autoplay muted loop playsinline preload="auto"
-           style="position: absolute; inset: 0; width: 100vw; height: 100vh; object-fit: cover; z-index: 0; pointer-events: none;">
-      <source src="https://github.com/dla-tech/Media-privada/raw/refs/heads/main/Logo_de_la_iglesia_PIPJM_h264.mp4" type="video/mp4">
-    </video>
-    <img src="https://raw.githubusercontent.com/dla-tech/Media-privada/refs/heads/main/Logo%20de%20la%20iglesia%20PIPJM%20(8.5%20x%209%20in)%20(8.5%20x%2011%20in)%20(11%20x%2011%20in).png"
-         alt="Logo de la iglesia"
-         style="position: relative; z-index: 1; width: clamp(280px, 50vw, 460px); filter: drop-shadow(0 6px 24px rgba(0,0,0,.35)); user-select: none; -webkit-user-drag: none;">
+    <img src="https://raw.githubusercontent.com/dla-tech/Media-privada/refs/heads/main/IMG_8023.jpeg"
+         alt="Pantalla de carga"
+         style="position:absolute; inset:0; width:100vw; height:100vh; object-fit:cover; z-index:1; user-select:none; -webkit-user-drag:none;">
   </div>
 
 
@@ -221,6 +265,8 @@
     <a href="#ubicacion-templo" class="navlink">Ubicación del templo</a>
     <a href="#ubicacion-cultos" class="navlink">Ubicación de los cultos</a>
     <a href="#proposito" class="navlink">Propósito</a>
+    <a id="btn-notifs" class="navlink" href="#" style="display:none; font-weight:800;">NOTIFICACIONES</a>
+    <a id="btn-install" class="navlink" href="#" style="background:#7c3aed; color:#fff; border-color: rgba(0,0,0,.08); font-weight:800;">descargar web</a>
   </nav>
 </header>
 
@@ -232,23 +278,66 @@
       Primera Iglesia Pentecostal de Jesucristo de Maunabo, P.R. Inc.
     </h1>
     <!-- Promoción dinámica -->
-    <div id="promo-banner" style="display: none; margin: 12px auto; text-align: center;">
-      <img id="promo-img" src="" alt="Promoción"
-           style="width: 70%; max-width: 500px; border-radius: 12px; box-shadow: 0 4px 14px rgba(0,0,0,.2); display: inline-block;">
+    <div id="promo-banner" style="display:none; margin:12px auto; text-align:center;">
+      <div class="promo-wrapper">
+        <img id="promo-img" src="" alt="Promoción" style="width:70%; max-width:500px;">
+      </div>
+      <button id="btn-descargar-promo" class="promo-btn">⬆️ DESCARGA LA PROMO ⬆️</button>
     </div>
 
 <script>
   (function(){
-    // Pega aquí el link de la imagen cuando tengas promoción
-    const promoLink = "https://raw.githubusercontent.com/dla-tech/Media-privada/refs/heads/main/7f6d0715-e757-4a11-a12a-771690367985.jpeg"
+    // ⬇️ Link de la imagen de promoción (déjalo vacío "" si NO hay promo)
+    const promoLink = "https://raw.githubusercontent.com/dla-tech/Media-privada/refs/heads/main/7f6d0715-e757-4a11-a12a-771690367985.jpeg";
 
-    const banner = document.getElementById("promo-banner");
-    const img = document.getElementById("promo-img");
+    const banner  = document.getElementById("promo-banner");
+    const img     = document.getElementById("promo-img");
+    const overlay = document.getElementById("promo-overlay");
+    const btnPromo = document.getElementById("btn-descargar-promo");
 
-    if (promoLink && banner && img){
-      img.src = promoLink;
-      banner.style.display = "block";
+    // Si no hay promo, ocultar todo el bloque y salir
+    if (!promoLink) {
+      if (banner) banner.style.display = "none";
+      if (btnPromo) btnPromo.classList.add('hidden');
+      return;
     }
+
+    // Mostrar y preparar imagen
+    if (img) img.src = promoLink;
+    if (banner) banner.style.display = "block";
+    if (btnPromo) btnPromo.classList.remove('hidden');
+    if (overlay) overlay.classList.add('hidden'); // aseguramos que no se muestre el overlay
+
+    // Descarga con nombre basado en fecha/hora actual
+    const descargar = async () => {
+      try {
+        const res = await fetch(promoLink, { mode: 'cors', cache: 'no-store' });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const blob = await res.blob();
+
+        const d = new Date();
+        const pad = n => String(n).padStart(2,'0');
+        const fname = `Promo_${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}_${pad(d.getHours())}-${pad(d.getMinutes())}.jpg`;
+
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = fname;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        console.error('❌ Error al descargar promo:', e);
+        alert('No se pudo descargar la promoción ahora. Intenta más tarde.');
+      }
+    };
+
+    // Click en botón debajo descarga
+    if (btnPromo) {
+      btnPromo.addEventListener('click', descargar);
+    }
+    // (opcional) si prefieres que la imagen también descargue, descomenta:
+    // if (img) { img.style.cursor = 'pointer'; img.addEventListener('click', descargar); }
   })();
 </script>
     <div class="card" style="margin-bottom:12px">
@@ -927,7 +1016,7 @@ if (choice){
 </script>
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('service-worker.js')
+    navigator.serviceWorker.register('./service-worker.js')
       .then(function(reg) {
         console.log('✅ Service Worker registrado con éxito:', reg);
       })
@@ -936,6 +1025,70 @@ if (choice){
       });
   }
 </script>
+<script>
+(function(){
+  const btn = document.getElementById('btn-notifs');
+  if (!btn) return;
+
+  // Solo mostrar en modo app por si acaso (CSS ya lo hace, esto es refuerzo)
+  const isStandalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || (window.navigator.standalone === true);
+  if (!isStandalone) { btn.style.display = 'none'; return; }
+
+  function setState(){
+    const p = (typeof Notification !== 'undefined') ? Notification.permission : 'default';
+    if (p === 'granted'){
+      btn.classList.add('ok');
+      btn.textContent = '✅ NOTIFICACIONES';
+    } else if (p === 'denied'){
+      btn.classList.remove('ok');
+      btn.textContent = '🚫 NOTIFICACIONES';
+    } else {
+      btn.classList.remove('ok');
+      btn.textContent = 'NOTIFICACIONES';
+    }
+  }
+
+  setState();
+
+  btn.addEventListener('click', async (e)=>{
+    e.preventDefault();
+    if (typeof Notification === 'undefined'){
+      alert('Este dispositivo no soporta notificaciones.');
+      return;
+    }
+    // Si ya están concedidas, no pedimos de nuevo
+    if (Notification.permission === 'granted'){
+      btn.classList.add('ok');
+      btn.textContent = '✅ NOTIFICACIONES';
+      return;
+    }
+    // Mostrar "reloj de arena" mientras se pide el permiso
+    const original = btn.textContent;
+    btn.classList.add('loading');
+    btn.textContent = '⏳ NOTIFICACIONES';
+
+    try{
+      const perm = await Notification.requestPermission();
+      if (perm === 'granted'){
+        btn.classList.add('ok');
+        btn.textContent = '✅ NOTIFICACIONES';
+      } else if (perm === 'denied'){
+        btn.classList.remove('ok');
+        btn.textContent = '🚫 NOTIFICACIONES';
+      } else {
+        btn.classList.remove('ok');
+        btn.textContent = 'NOTIFICACIONES';
+      }
+    } catch(e){
+      console.warn('Permiso notificaciones falló:', e);
+      btn.classList.remove('ok');
+      btn.textContent = original;
+    } finally {
+      btn.classList.remove('loading');
+    }
+  });
+})();
+</script>
 </body>
-</body>
+<img src="https://raw.githubusercontent.com/dla-tech/Media-privada/refs/heads/main/Logo%20de%20la%20iglesia%20PIPJM-2.png" alt="Logo fijo" class="fixed-logo">
 </html>
