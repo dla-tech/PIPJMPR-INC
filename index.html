@@ -206,6 +206,17 @@
   #btn-descargar-promo.hidden{ display:none !important; }
   .hidden{ display:none !important; }
   .fixed-logo {
+    position: fixed;
+    bottom: 20px;
+    left: 20px;
+    width: 80px;
+    height: auto;
+    z-index: 9999;
+    pointer-events: none; /* evita interacción */
+    animation: spinY 6s linear infinite;
+    transform-style: preserve-3d;
+  }
+
   /* Botón de NOTIFICACIONES solo visible en app (standalone) */
   #btn-notifs {
     background:#ef4444; /* rojo inicial */
@@ -217,16 +228,6 @@
   @media (display-mode: standalone) {
     #btn-install { display:none !important; }   /* ocultar DESCARGAR cuando es app */
     #btn-notifs { display:block !important; }   /* mostrar NOTIFICACIONES en la app */
-  }
-    position: fixed;
-    bottom: 20px;
-    left: 20px;
-    width: 80px;
-    height: auto;
-    z-index: 9999;
-    pointer-events: none; /* evita interacción */
-    animation: spinY 6s linear infinite;
-    transform-style: preserve-3d;
   }
 
   @keyframes spinY {
