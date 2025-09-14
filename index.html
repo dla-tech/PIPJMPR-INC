@@ -1016,6 +1016,58 @@ if (choice){
   setTimeout(done, HARD_FALLBACK);
 })();
 </script>
+<!-- === PASO 1: Firebase para Push (solo foreground) === -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js"></script>
+<script>
+  // Config de tu proyecto Firebase (usa la tuya real; esta es la que me compartiste)
+  const firebaseConfig = {
+    apiKey: "AIzaSyA0Yj_GIZqNzMaH5ChzWsSz_spORbHKMiY",
+    authDomain: "miappiglesia.firebaseapp.com",
+    projectId: "miappiglesia",
+    storageBucket: "miappiglesia.firebasestorage.app",
+    messagingSenderId: "624809525779",
+    appId: "1:624809525779:web:2608aa1d23a84e466a35e6",
+    measurementId: "G-8LLBP4ZB45"
+  };
+  // Inicializa Firebase
+  if (!window.firebase?.apps?.length) {
+    firebase.initializeApp(firebaseConfig);
+  }
+  const messaging = firebase.messaging();
+
+  // ⚠️ Reemplaza con tu clave pública VAPID (Firebase Console → Cloud Messaging → Certificados push web)
+  const VAPID_KEY = "wuxClSQ4pwCsXyPX3BSx0C-UXj9bOwAuAtdfY1bgrIc";
+
+  // Helper: solicita/obtiene token de FCM (Paso 1: sin SW dedicado; añadiremos SW en Paso 2)
+  async function obtenerTokenFCM(){
+    if (!('Notification' in window)) {
+      console.warn('Este navegador no soporta Notification API');
+      return null;
+    }
+    if (Notification.permission !== 'granted') {
+      console.warn('Permiso de notificaciones no concedido todavía');
+      return null;
+    }
+    if (!VAPID_KEY || VAPID_KEY.includes('REEMPLAZA_CON_TU_VAPID_KEY')) {
+      alert('Falta configurar la clave pública VAPID en el código.');
+      return null;
+    }
+    try{
+      const token = await messaging.getToken({ vapidKey: VAPID_KEY });
+      if (token) {
+        console.log('🎯 TOKEN FCM:', token);
+        // TODO (Paso 2): enviar este token a tu backend/Firestore si quieres notificaciones dirigidas
+      } else {
+        console.warn('No se obtuvo token (¿bloqueado por navegador?)');
+      }
+      return token;
+    }catch(err){
+      console.error('Error al obtener token FCM:', err);
+      return null;
+    }
+  }
+</script>
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./service-worker.js')
@@ -1041,6 +1093,7 @@ if (choice){
     if (p === 'granted'){
       btn.classList.add('ok');
       btn.textContent = '✅ NOTIFICACIONES';
+      if (typeof obtenerTokenFCM === 'function') { obtenerTokenFCM(); }
     } else if (p === 'denied'){
       btn.classList.remove('ok');
       btn.textContent = '🚫 NOTIFICACIONES';
@@ -1062,6 +1115,7 @@ if (choice){
     if (Notification.permission === 'granted'){
       btn.classList.add('ok');
       btn.textContent = '✅ NOTIFICACIONES';
+      if (typeof obtenerTokenFCM === 'function') { obtenerTokenFCM(); }
       return;
     }
     // Mostrar "reloj de arena" mientras se pide el permiso
@@ -1074,6 +1128,7 @@ if (choice){
       if (perm === 'granted'){
         btn.classList.add('ok');
         btn.textContent = '✅ NOTIFICACIONES';
+        if (typeof obtenerTokenFCM === 'function') { obtenerTokenFCM(); }
       } else if (perm === 'denied'){
         btn.classList.remove('ok');
         btn.textContent = '🚫 NOTIFICACIONES';
@@ -1125,7 +1180,7 @@ if (choice){
 
 Paso 2: Selecciona "Compartir"
 
-Paso 3: Desliza hacia abajo y presiona "Agregar a inicio"
+Paso 3: Desliza y presiona (Agregar a inicio)
 
 Paso 4: Presiona "Agregar"`);
       return;
