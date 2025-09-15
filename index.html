@@ -1022,15 +1022,13 @@ if (choice){
 <!-- Firestore (compat) -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script>
-  // Instancia de Firestore
-  const db = firebase.firestore();
-
   // Guardar token en la colección fcmTokens
+  // Nota: la instancia global `window.db` se crea DESPUÉS de initializeApp (más abajo).
   async function guardarTokenFCM(token){
     try {
       const ua = navigator.userAgent || '';
       const ts = new Date().toISOString();
-      // Usamos el token como ID del documento (así lo puedes sobreescribir si cambia)
+      const db = window.db || firebase.firestore();
       await db.collection('fcmTokens').doc(token).set(
         { token, ua, ts },
         { merge: true }
@@ -1057,6 +1055,11 @@ if (choice){
     firebase.initializeApp(firebaseConfig);
   }
   const messaging = firebase.messaging();
+
+  // Crear instancia global de Firestore DESPUÉS de initializeApp
+  if (!window.db) {
+    window.db = firebase.firestore();
+  }
 
   // ⚠️ Reemplaza con tu clave pública VAPID (Firebase Console → Cloud Messaging → Certificados push web)
   const VAPID_KEY = "BGEv9r_6M-xZbyqhUzYYgMT9N6cMtJvLAmE64_H2WoB_tJA_L0qWlTQC3Lhz5tCnpbEd267QMHYvjASiHCOb7gU";
