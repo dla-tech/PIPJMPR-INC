@@ -5,9 +5,11 @@ importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-com
 
 // Forzar que el SW nuevo tome control rápido
 self.addEventListener('install', () => self.skipWaiting());
-self.addEventListener('activate', (event) => { event.waitUntil(self.clients.claim()); });
+self.addEventListener('activate', (event) => {
+  event.waitUntil(self.clients.claim());
+});
 
-// Configuración del MISMO proyecto que tu index.html: miappiglesia-c703a
+// Configuración de tu proyecto
 firebase.initializeApp({
   apiKey: "AIzaSyAHQjMp8y9uaxAd0nnmCcVaXWSbij3cvEo",
   authDomain: "miappiglesia-c703a.firebaseapp.com",
@@ -19,15 +21,12 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
-// Notificaciones cuando la PWA está en 2º plano / cerrada
+// Estrategia A: dejar que el navegador maneje notification payloads.
+// No hacemos showNotification, así NO hay duplicados.
 messaging.onBackgroundMessage((payload) => {
-  const title = payload?.notification?.title || 'Nueva notificación';
-  const body  = payload?.notification?.body  || '';
-  const icon  = payload?.notification?.icon  || '/icons/icon-192.png';
-
-  self.registration.showNotification(title, {
-    body,
-    icon,
-    data: payload?.data || {}
-  });
+  console.log('[FM A] Mensaje en background:', payload);
+  if (payload?.notification) {
+    // navegador se encarga de mostrarla
+    return;
+  }
 });
