@@ -1019,6 +1019,28 @@ if (choice){
 <!-- === PASO 1: Firebase para Push (solo foreground) === -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js"></script>
+<!-- Firestore (compat) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+  // Instancia de Firestore
+  const db = firebase.firestore();
+
+  // Guardar token en la colección fcmTokens
+  async function guardarTokenFCM(token){
+    try {
+      const ua = navigator.userAgent || '';
+      const ts = new Date().toISOString();
+      // Usamos el token como ID del documento (así lo puedes sobreescribir si cambia)
+      await db.collection('fcmTokens').doc(token).set(
+        { token, ua, ts },
+        { merge: true }
+      );
+      console.log('✅ Token guardado en Firestore');
+    } catch (e) {
+      console.error('❌ Error guardando token en Firestore:', e);
+    }
+  }
+</script>
 <script>
   // Config de tu proyecto Firebase (usa la tuya real; esta es la que me compartiste)
   const firebaseConfig = {
@@ -1054,9 +1076,14 @@ if (choice){
       return null;
     }
     try{
-      const token = await messaging.getToken({ vapidKey: VAPID_KEY });
+      const opts = { vapidKey: VAPID_KEY };
+      if (window.appSW) opts.serviceWorkerRegistration = window.appSW;
+      const token = await messaging.getToken(opts);
       if (token) {
         console.log('🎯 TOKEN FCM:', token);
+        if (token && typeof guardarTokenFCM === 'function') {
+          guardarTokenFCM(token);
+        }
         // TODO (Paso 2): enviar este token a tu backend/Firestore si quieres notificaciones dirigidas
       } else {
         console.warn('No se obtuvo token (¿bloqueado por navegador?)');
@@ -1069,15 +1096,18 @@ if (choice){
   }
 </script>
 <script>
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./service-worker.js')
-      .then(function(reg) {
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./service-worker.js', { scope: './' })
+      .then((reg) => {
         console.log('✅ Service Worker registrado con éxito:', reg);
+        window.appSW = reg; // guardar la registration para FCM
       })
-      .catch(function(err) {
+      .catch((err) => {
         console.log('❌ Error al registrar Service Worker:', err);
       });
-  }
+  }, { once: true });
+}
 </script>
 <script>
 (function(){
