@@ -1,31 +1,33 @@
-// Importa Firebase en el Service Worker
-importScripts("https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js");
-importScripts("https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js");
+/* eslint-disable no-undef */
+// === Service Worker para Firebase Cloud Messaging (FCM) ===
+importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js');
 
-// Configuración de tu proyecto (la misma del index.html)
+// Forzar que el SW nuevo tome control rápido
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', (event) => { event.waitUntil(self.clients.claim()); });
+
+// Configuración del MISMO proyecto que tu index.html: miappiglesia-c703a
 firebase.initializeApp({
-  apiKey: "AIzaSyA0Yj_GIZqNzMaH5ChzWsSz_spORbHKMiY",
-  authDomain: "miappiglesia.firebaseapp.com",
-  projectId: "miappiglesia",
-  storageBucket: "miappiglesia.firebasestorage.app",
-  messagingSenderId: "624809525779",
-  appId: "1:624809525779:web:2608aa1d23a84e466a35e6",
-  measurementId: "G-8LLBP4ZB45"
+  apiKey: "AIzaSyAHQjMp8y9uaxAd0nnmCcVaXWSbij3cvEo",
+  authDomain: "miappiglesia-c703a.firebaseapp.com",
+  projectId: "miappiglesia-c703a",
+  storageBucket: "miappiglesia-c703a.appspot.com",
+  messagingSenderId: "501538616252",
+  appId: "1:501538616252:web:d6ead88050c4dd7b09b1b9"
 });
 
-// Inicializa Messaging en este SW
 const messaging = firebase.messaging();
 
-// Maneja notificaciones en segundo plano
+// Notificaciones cuando la PWA está en 2º plano / cerrada
 messaging.onBackgroundMessage((payload) => {
-  console.log("📩 Notificación recibida en segundo plano:", payload);
+  const title = payload?.notification?.title || 'Nueva notificación';
+  const body  = payload?.notification?.body  || '';
+  const icon  = payload?.notification?.icon  || '/icons/icon-192.png';
 
-  const notificationTitle = payload.notification?.title || "Nueva notificación";
-  const notificationOptions = {
-    body: payload.notification?.body || "Tienes un nuevo mensaje",
-    icon: "/icons/icon-192.png", // asegúrate de tener este icono en /icons/
-    badge: "/icons/icon-72.png"  // opcional, para iOS/Android
-  };
-
-  self.registration.showNotification(notificationTitle, notificationOptions);
+  self.registration.showNotification(title, {
+    body,
+    icon,
+    data: payload?.data || {}
+  });
 });
