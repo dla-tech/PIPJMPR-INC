@@ -1,22 +1,26 @@
 const CACHE = 'app-v3';
+
 self.addEventListener('fetch', (event) => {
   const req = event.request;
 
   if (req.mode === 'navigate') {
+    // Fallback: si no hay conexión, devuelve index.html
     event.respondWith(fetch(req).catch(() => caches.match('./index.html')));
     return;
   }
 
   // Solo manejar GET para cachear
-  if (req.method !== 'GET') return;  // deja pasar otras (POST/PUT/etc.)
+  if (req.method !== 'GET') return;  // deja pasar POST/PUT/etc.
 
   event.respondWith(
     fetch(req)
       .then((resp) => {
-        // cachear solo respuestas exitosas
+        // Cachear solo respuestas exitosas (200)
         if (resp && resp.status === 200) {
           const copy = resp.clone();
-          caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
+          caches.open(CACHE)
+            .then((c) => c.put(req, copy))
+            .catch(() => {});
         }
         return resp;
       })
