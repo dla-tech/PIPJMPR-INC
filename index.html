@@ -1065,6 +1065,51 @@ if ('serviceWorker' in navigator) {
   document.addEventListener('DOMContentLoaded', loadPromosFromGitHubJSON);
 </script>
 
+</script>
+<!-- ===== PWA: Instalar en Android (Descargar Web) ===== -->
+<script>
+(function(){
+  const btn = document.getElementById('btn-install');
+  if(!btn) return;
+
+  // Si ya está instalada, ocultar (refuerzo extra además del CSS)
+  const isStandalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || (window.navigator.standalone === true);
+  if (isStandalone) { btn.style.display = 'none'; return; }
+
+  let deferredPrompt = null;
+
+  // Chrome/Android dispara este evento cuando la app es instalable
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();            // evita el mini-infobar
+    deferredPrompt = e;            // guardamos el evento para usarlo en el click
+    // Asegura que el botón esté visible y habilitado
+    btn.style.display = '';
+    btn.disabled = false;
+  });
+
+  // Click del botón: muestra el diálogo nativo de instalar
+  btn.addEventListener('click', async (ev) => {
+    ev.preventDefault();
+    if (!deferredPrompt) {
+      // Fallback: algunos navegadores no exponen beforeinstallprompt
+      alert('Si no aparece el diálogo, abre el menú del navegador y elige "Instalar app" o "Añadir a pantalla de inicio".');
+      return;
+    }
+    deferredPrompt.prompt();
+    try {
+      const { outcome } = await deferredPrompt.userChoice; // 'accepted' | 'dismissed'
+      // console.log('Instalación:', outcome);
+    } catch(_){}
+    deferredPrompt = null; // el evento se puede usar una sola vez
+  });
+
+  // Cuando se instala, ocultamos el botón
+  window.addEventListener('appinstalled', () => {
+    btn.style.display = 'none';
+  });
+})();
+</script>
+
 <img src="https://raw.githubusercontent.com/dla-tech/Media-privada/refs/heads/main/Logo%20de%20la%20iglesia%20PIPJM-2.png" alt="Logo fijo" class="fixed-logo">
 </body>
 </html>
