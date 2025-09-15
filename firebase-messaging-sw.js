@@ -1,9 +1,8 @@
-/* eslint-disable no-undef */
-// === Service Worker para Firebase Cloud Messaging (FCM) ===
-importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js');
-importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js');
+// Importa Firebase en el Service Worker
+importScripts("https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js");
+importScripts("https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js");
 
-// Misma configuración pública de tu app
+// Configuración de tu proyecto (la misma del index.html)
 firebase.initializeApp({
   apiKey: "AIzaSyA0Yj_GIZqNzMaH5ChzWsSz_spORbHKMiY",
   authDomain: "miappiglesia.firebaseapp.com",
@@ -14,17 +13,19 @@ firebase.initializeApp({
   measurementId: "G-8LLBP4ZB45"
 });
 
+// Inicializa Messaging en este SW
 const messaging = firebase.messaging();
 
-// Notificaciones cuando la PWA está cerrada/segundo plano
+// Maneja notificaciones en segundo plano
 messaging.onBackgroundMessage((payload) => {
-  const title = payload?.notification?.title || 'Nueva notificación';
-  const body  = payload?.notification?.body  || '';
-  const icon  = payload?.notification?.icon  || 'icons/icon-192.png';
+  console.log("📩 Notificación recibida en segundo plano:", payload);
 
-  self.registration.showNotification(title, {
-    body,
-    icon,
-    data: payload?.data || {}
-  });
+  const notificationTitle = payload.notification?.title || "Nueva notificación";
+  const notificationOptions = {
+    body: payload.notification?.body || "Tienes un nuevo mensaje",
+    icon: "/icons/icon-192.png", // asegúrate de tener este icono en /icons/
+    badge: "/icons/icon-72.png"  // opcional, para iOS/Android
+  };
+
+  self.registration.showNotification(notificationTitle, notificationOptions);
 });
