@@ -1080,7 +1080,8 @@ if (choice){
     }
     try{
       const opts = { vapidKey: VAPID_KEY };
-      if (window.appSW) opts.serviceWorkerRegistration = window.appSW;
+      if (window.fcmSW) opts.serviceWorkerRegistration = window.fcmSW;
+      else if (window.appSW) opts.serviceWorkerRegistration = window.appSW;
       const token = await messaging.getToken(opts);
       if (token) {
         console.log('🎯 TOKEN FCM:', token);
@@ -1101,13 +1102,24 @@ if (choice){
 <script>
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
+    // SW de la PWA
     navigator.serviceWorker.register('./service-worker.js', { scope: './' })
       .then((reg) => {
         console.log('✅ Service Worker registrado con éxito:', reg);
-        window.appSW = reg; // guardar la registration para FCM
+        window.appSW = reg; // guardar la registration para FCM si hiciera falta
       })
       .catch((err) => {
         console.log('❌ Error al registrar Service Worker:', err);
+      });
+
+    // SW dedicado de Firebase Cloud Messaging (FCM)
+    navigator.serviceWorker.register('./firebase-messaging-sw.js', { scope: './' })
+      .then((reg) => {
+        console.log('✅ SW de FCM registrado:', reg);
+        window.fcmSW = reg; // preferir esta registration para getToken
+      })
+      .catch((err) => {
+        console.error('❌ Error registrando SW FCM', err);
       });
   }, { once: true });
 }
