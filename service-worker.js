@@ -1,3 +1,4 @@
+const CACHE = 'app-v3';
 self.addEventListener('fetch', (event) => {
   const req = event.request;
 
