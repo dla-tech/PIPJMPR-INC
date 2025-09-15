@@ -1092,7 +1092,7 @@ if ('serviceWorker' in navigator) {
     ev.preventDefault();
     if (!deferredPrompt) {
       // Fallback: algunos navegadores no exponen beforeinstallprompt
-      alert('Si no aparece el diálogo, abre el menú del navegador y elige "Instalar app" o "Añadir a pantalla de inicio".');
+      alert("Paso 1: Presiona los tres puntos (abajo derecha o arriba)\n\nPaso 2: presiona \"Compartir\"\n\nPaso 3: Desliza hacia abajo selecciona \"Agregar a Inicio\"\n\nPaso 4: Presiona (Boton Azul) \"Agregar\"");
       return;
     }
     deferredPrompt.prompt();
