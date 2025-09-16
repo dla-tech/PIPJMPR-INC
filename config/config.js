@@ -71,7 +71,7 @@ window.APP_CONFIG = {
     installButton: {
       id: "btn-install",
       visible: true,
-      label: "Descargar Web",
+      label: "Descargar App",
       styles: { bg: "#7c3aed", color: "#fff" }
     }
   },
