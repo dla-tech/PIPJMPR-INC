@@ -79,8 +79,16 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
   });
 
   // notif + install
-  const nb = el('a',{id:cfg.nav?.notifButton?.id||'btn-notifs',className:'navlink',href:'#',textContent:cfg.nav?.notifButton?.labels?.default||'NOTIFICACIONES'});
-  nb.style.display='none';
+  const nb = el('a',{
+  id: cfg.nav?.notifButton?.id || 'btn-notifs',
+  className: 'navlink',
+  href: '#',
+  textContent: cfg.nav?.notifButton?.labels?.default || 'NOTIFICACIONES'
+});
+const isStandaloneNow =
+  (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
+  (window.navigator.standalone === true);
+nb.style.display = isStandaloneNow ? '' : 'none';
   const ibCfg = cfg.nav?.installButton;
   const ib = el('a',{id:ibCfg?.id||'btn-install',className:'navlink',href:'#',textContent:ibCfg?.label||'Descargar Web'});
   ib.style.background = ibCfg?.styles?.bg || '#7c3aed';
@@ -466,57 +474,70 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
       return token;
     }catch(e){ console.error('getToken FCM:',e); return null; }
   }
+const nb = $('#'+(cfg.nav?.notifButton?.id||'btn-notifs'));
+if (!nb) return;
 
-  const nb = $('#'+(cfg.nav?.notifButton?.id||'btn-notifs'));
-if(nb){
-  // Muestra el botón SOLO en modo app instalada. En navegador, no hace nada (lo oculta el CSS).
-  const isStandalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || (window.navigator.standalone === true);
-  if(!isStandalone){ return; }
+// ¿Está instalada (standalone)?
+const isStandalone =
+  (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
+  (window.navigator.standalone === true);
 
-  nb.style.pointerEvents = 'auto'; // opcional: aseguramos interacción
+if (!isStandalone) {
+  // En navegador normal: oculto
+  nb.style.display = 'none';
+  return;
+}
 
-  function setState(){
-    const labels = cfg.nav?.notifButton?.labels || {};
-    const p = (typeof Notification !== 'undefined') ? Notification.permission : 'default';
-    if (p === 'granted'){
-      nb.classList.add('ok');
-      nb.textContent = labels.ok || '✅ NOTIFICACIONES';
-      if (typeof obtenerToken === 'function') { obtenerToken(); }
-    } else if (p === 'denied'){
-      nb.classList.remove('ok');
-      nb.textContent = labels.denied || '🚫 NOTIFICACIONES';
-    } else {
-      nb.classList.remove('ok');
-      nb.textContent = labels.default || 'NOTIFICACIONES';
-    }
+// ✅ En PWA instalada: muéstralo explícitamente
+nb.style.display = '';
+nb.style.pointerEvents = 'auto'; // opcional
+
+function setState(){
+  const labels = cfg.nav?.notifButton?.labels || {};
+  const p = (typeof Notification !== 'undefined') ? Notification.permission : 'default';
+  if (p === 'granted'){
+    nb.classList.add('ok');
+    nb.textContent = labels.ok || '✅ NOTIFICACIONES';
+    if (typeof obtenerToken === 'function') obtenerToken();
+  } else if (p === 'denied'){
+    nb.classList.remove('ok');
+    nb.textContent = labels.denied || '🚫 NOTIFICACIONES';
+  } else {
+    nb.classList.remove('ok');
+    nb.textContent = labels.default || 'NOTIFICACIONES';
   }
+}
 
-  setState();
+setState();
 
-  nb.addEventListener('click', async (e)=>{
-    e.preventDefault();
-    if (typeof Notification === 'undefined'){
-      alert('Este dispositivo no soporta notificaciones.');
-      return;
-    }
-    if (Notification.permission === 'granted'){
-      setState();
-      if (typeof obtenerToken === 'function') { obtenerToken(); }
-      return;
-    }
-    const original = nb.textContent;
-    nb.classList.add('loading');
-    nb.textContent = '⏳ NOTIFICACIONES';
-    try{
-      const perm = await Notification.requestPermission();
-      setState();
-      if (perm === 'granted' && typeof obtenerToken === 'function') { obtenerToken(); }
-    } catch(_){
-      setState();
-      nb.textContent = original;
-    } finally {
-      nb.classList.remove('loading');
-    }
+nb.addEventListener('click', async (e)=>{
+  e.preventDefault();
+  if (typeof Notification === 'undefined'){
+    alert('Este dispositivo no soporta notificaciones.');
+    return;
+  }
+  if (Notification.permission === 'granted'){
+    setState();
+    if (typeof obtenerToken === 'function') obtenerToken();
+    return;
+  }
+  nb.classList.add('loading');
+  nb.textContent = '⏳ NOTIFICACIONES';
+  try{
+    const perm = await Notification.requestPermission();
+    setState();
+    if (perm === 'granted' && typeof obtenerToken === 'function') obtenerToken();
+  } finally {
+    nb.classList.remove('loading');
+  }
+});
+
+// (Opcional) si cambia el display-mode, actualiza visibilidad
+if (window.matchMedia) {
+  const mq = window.matchMedia('(display-mode: standalone)');
+  mq.addEventListener?.('change', () => {
+    const st = mq.matches || (window.navigator.standalone === true);
+    nb.style.display = st ? '' : 'none';
   });
 }
 })();
