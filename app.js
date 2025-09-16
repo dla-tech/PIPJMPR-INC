@@ -468,28 +468,57 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
   }
 
   const nb = $('#'+(cfg.nav?.notifButton?.id||'btn-notifs'));
-  if(nb){
-    const isStandalone=(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || (window.navigator.standalone===true);
-    if(!isStandalone){ nb.style.display='none'; return; }
-    function setState(){
-      const p=(typeof Notification!=='undefined')?Notification.permission:'default';
-      if(p==='granted'){ nb.classList.add('ok'); nb.textContent=cfg.nav?.notifButton?.labels?.ok||'✅ NOTIFICACIONES'; obtenerToken(); }
-      else if(p==='denied'){ nb.classList.remove('ok'); nb.textContent=cfg.nav?.notifButton?.labels?.denied||'🚫 NOTIFICACIONES'; }
-      else { nb.classList.remove('ok'); nb.textContent=cfg.nav?.notifButton?.labels?.default||'NOTIFICACIONES'; }
+if(nb){
+  // Muestra el botón SOLO en modo app instalada. En navegador, no hace nada (lo oculta el CSS).
+  const isStandalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || (window.navigator.standalone === true);
+  if(!isStandalone){ return; }
+
+  nb.style.pointerEvents = 'auto'; // opcional: aseguramos interacción
+
+  function setState(){
+    const labels = cfg.nav?.notifButton?.labels || {};
+    const p = (typeof Notification !== 'undefined') ? Notification.permission : 'default';
+    if (p === 'granted'){
+      nb.classList.add('ok');
+      nb.textContent = labels.ok || '✅ NOTIFICACIONES';
+      if (typeof obtenerToken === 'function') { obtenerToken(); }
+    } else if (p === 'denied'){
+      nb.classList.remove('ok');
+      nb.textContent = labels.denied || '🚫 NOTIFICACIONES';
+    } else {
+      nb.classList.remove('ok');
+      nb.textContent = labels.default || 'NOTIFICACIONES';
     }
-    setState();
-    nb.addEventListener('click', async (e)=>{
-      e.preventDefault();
-      if(typeof Notification==='undefined'){ alert('Este dispositivo no soporta notificaciones.'); return; }
-      if(Notification.permission==='granted'){ setState(); return; }
-      nb.classList.add('loading'); nb.textContent='⏳ NOTIFICACIONES';
-      try{
-        const perm=await Notification.requestPermission();
-        setState();
-        if(perm==='granted') await obtenerToken();
-      }catch(_){ setState(); } finally{ nb.classList.remove('loading'); }
-    });
   }
+
+  setState();
+
+  nb.addEventListener('click', async (e)=>{
+    e.preventDefault();
+    if (typeof Notification === 'undefined'){
+      alert('Este dispositivo no soporta notificaciones.');
+      return;
+    }
+    if (Notification.permission === 'granted'){
+      setState();
+      if (typeof obtenerToken === 'function') { obtenerToken(); }
+      return;
+    }
+    const original = nb.textContent;
+    nb.classList.add('loading');
+    nb.textContent = '⏳ NOTIFICACIONES';
+    try{
+      const perm = await Notification.requestPermission();
+      setState();
+      if (perm === 'granted' && typeof obtenerToken === 'function') { obtenerToken(); }
+    } catch(_){
+      setState();
+      nb.textContent = original;
+    } finally {
+      nb.classList.remove('loading');
+    }
+  });
+}
 })();
 
 /* ───────── Logo giratorio ───────── */
