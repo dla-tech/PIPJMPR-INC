@@ -48,7 +48,7 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
     const MIN = +L.minVisibleMs||1500, FADE=+L.fadeMs||2000, HARD=(+L.hardFallbackMs||MIN+FADE+1500);
     const start=performance.now();
     const done=()=>{
-      document.body.classList.remove('loading');
+     document.documentElement.classList.remove('loading');
       loader.classList.add('hide');
       $('#preload-style')?.remove();
       setTimeout(()=>{ try{ loader.remove(); }catch(_){ } }, FADE+100);
