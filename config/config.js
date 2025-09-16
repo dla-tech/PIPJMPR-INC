@@ -1,1115 +1,321 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Programaciones mensuales</title>
-<style>
-  :root{
-    --bg:url("https://raw.githubusercontent.com/dla-tech/Media-privada/refs/heads/main/IMG_7782.jpeg");
-    --card: rgba(255,255,255,.86);
-    --ink: #0b1421;
-    --accent: #2563eb;
-    --shadow: 0 8px 20px rgba(0,0,0,.15);
-    --radius: 14px;
-  }
-  *{box-sizing:border-box}
-  html{scroll-behavior:smooth}
-  body{
-    margin:0; font-family: system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
-    color:var(--ink);
-    background:#0b1421; min-height:100svh;
-  }
-  body::before{content:"";position:fixed;inset:0;background-image:var(--bg);background-size:cover;background-position:center;filter:brightness(.9) saturate(.9);z-index:-2}
-  body::after{content:"";position:fixed;inset:0;background:linear-gradient(180deg,rgba(8,11,20,.35),rgba(8,11,20,.6));z-index:-1}
+// /config/config.js
+// ──────────────────────────────────────────────────────────────────────────────
+// CONTROL EXTERNO DE ESTILO + UI + ENLACES + AJUSTES TÉCNICOS (SIN TOCAR INDEX)
+// NOTA: Valores prellenados con lo que usa actualmente tu página.
+//       Sube meta.version cuando modifiques este archivo para forzar actualización.
+// ──────────────────────────────────────────────────────────────────────────────
 
-  /* ===== Splash / Pantalla de carga ===== */
-  .loading,
-  .loading body { overflow:hidden; height:100%; }
-  #loader {
-    position: fixed; inset: 0;
-    display: flex; align-items: center; justify-content: center;
-    background: transparent; z-index: 100000; opacity: 1;
-    transition: opacity 2000ms ease;
-  }
-  #loader img{
-    position:absolute; inset:0; width:100vw; height:100vh;
-    object-fit:cover; object-position:50% 45%;
-    z-index:1; user-select:none; -webkit-user-drag:none;
-  }
-  #loader.hide { opacity: 0; pointer-events: none; }
+window.APP_CONFIG = {
+  // ────────────────────────────────────────────────────────────────────────────
+  // META / VERSIONADO
+  // NOTA: Identidad básica y control de cache-busting para que el SW refresque.
+  // ────────────────────────────────────────────────────────────────────────────
+  meta: {
+    appName: "Programaciones mensuales",
+    version: "1.0.1",          // ⬅️ súbelo cuando cambies la config
+    themeColor: "#0b1421",     // <meta name="theme-color">
+    lastUpdated: "2025-09-16"
+  },
 
-  /* Canvas de fuego detrás del logo (opcional) */
-  #loader-canvas{ position:fixed; top:0; left:0; width:100vw; height:100vh; display:block; z-index:0; pointer-events:none; }
-  #loader img{ position:relative; z-index:1; }
+  // ────────────────────────────────────────────────────────────────────────────
+  // SECURITY / POLÍTICAS DE CARGA
+  // NOTA: Declaras aquí tus dominios oficiales y banderas de seguridad.
+  //       El app.js debe leer esto y aplicar el "guard" de dominio.
+  // ────────────────────────────────────────────────────────────────────────────
+  security: {
+    // Dominios autorizados para aplicar esta configuración
+    allowedHosts: [
+      "localhost", "127.0.0.1",
+      "dla-tech.github.io",
+      "vercel.app"          // si usas Vercel: permite *.vercel.app
+      // "tudominio.com"    // añade tu dominio personalizado si aplica
+    ],
 
-  /* ===== NAV responsive ===== */
-  header{
-    position:sticky; top:0; z-index:50;
-    backdrop-filter:saturate(1.2) blur(8px);
-    background:rgba(255,255,255,.55);
-    border-bottom:1px solid rgba(0,0,0,.08);
-    transition: transform .4s ease; will-change: transform;
-  }
-  header.hide{ transform: translateY(-100%); }
+    // Si true, el app.js validará el hostname y NO aplicará la config en hosts no autorizados
+    enforceHostCheck: true,
 
-  .nav{
-    max-width:1100px; margin:0 auto; padding:8px 10px;
-    display:grid; gap:8px; grid-template-columns: repeat(2, 1fr);
-  }
-  .nav .spacer{ display:none; }
-  .nav a{
-    display:block; text-align:center; text-decoration:none; font-weight:600;
-    color:#0b1421; padding:10px 10px; font-size:14px; border-radius:10px;
-    border:1px solid rgba(0,0,0,.08); background:rgba(255,255,255,.5);
-  }
-  .nav a.active{ background:#e9efff; color:#2563eb; border-color:rgba(37,99,235,.25); }
+    // Si en el futuro mueves escrituras sensibles a backend/Cloud Functions
+    useBackendForSensitiveWrites: false,
 
-  /* iOS compacto */
-  @supports (-webkit-touch-callout: none){
-    @media (max-width: 430px){
-      .nav{ padding:8px 10px; gap:8px; }
-      .nav a{ padding:9px 10px; font-size:13.5px; border-radius:10px; }
+    // Opcional: activar logs de seguridad en consola
+    verbose: true
+  },
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // ASSETS GLOBALES
+  // NOTA: Rutas de imágenes/íconos. Cambias aquí sin tocar HTML.
+  // ────────────────────────────────────────────────────────────────────────────
+  assets: {
+    pageBackgroundImage: "https://raw.githubusercontent.com/dla-tech/Media-privada/refs/heads/main/IMG_7782.jpeg",
+    logoRotating: "https://raw.githubusercontent.com/dla-tech/Media-privada/refs/heads/main/Logo%20de%20la%20iglesia%20PIPJM-2.png",
+    icon180: "icons/icon-180.png",
+    icon512: "icons/icon-512.png",
+    icons: { youtube: "", notification: "", download: "", externalLink: "" }
+  },
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // THEME (COLORES / TIPOGRAFÍA / RADIOS / SOMBRAS / TRANSICIONES)
+  // NOTA: Refleja tus CSS variables actuales con extras listos para crecer.
+  // ────────────────────────────────────────────────────────────────────────────
+  theme: {
+    mode: "auto", // "light" | "dark" | "auto"
+    colors: {
+      ink: "#0b1421",                   // texto oscuro en superficies claras
+      primary: "#2563eb",               // azul activo/nav
+      surfaceCard: "rgba(255,255,255,.86)", // cards
+      bgBase: "#0b1421",                // fondo base
+      textOnDark: "#ffffff",
+      btnGreen: "#34C759",
+      btnBlue: "#4285F4",
+      btnDark: "#0f172a",
+      btnYellow: "#facc15",
+      btnYouTube: "#ff0000",
+      headerGlassBg: "rgba(255,255,255,.55)",
+      headerBorder: "rgba(0,0,0,.08)",
+      navActiveBg: "#e9efff",
+      navActiveText: "#2563eb",
+      liveHeadGradient: "linear-gradient(90deg,#b91c1c,#ef4444)",
+      pageOverlay: "linear-gradient(180deg,rgba(8,11,20,.35),rgba(8,11,20,.6))"
+    },
+    typography: {
+      family: "system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif",
+      scale: { base: "16px", h1: "", h2: "", h3: "", body: "", caption: "" }
+    },
+    radii: {
+      uiRadius: "14px",
+      card: "14px",
+      button: "12px",
+      modal: "12px",
+      navLink: "10px",
+      promoImage: "14px"
+    },
+    shadows: {
+      soft: "0 8px 20px rgba(0,0,0,.15)",
+      promoImg: "0 10px 34px rgba(0,0,0,.20)",
+      modal: "0 6px 16px rgba(0,0,0,.25)",
+      btn: "0 2px 8px rgba(0,0,0,.25)"
+    },
+    transitions: {
+      fast: "150ms",
+      normal: "280ms",
+      slow: "450ms",
+      loaderFade: "2000ms" // debe coordinar con CSS del loader
     }
-    @media (max-width: 360px){
-      .nav{ padding:6px 8px; gap:6px; }
-      .nav a{ padding:8px 8px; font-size:13px; }
+  },
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // LAYOUT / ESTRUCTURA VISUAL
+  // NOTA: Header/Nav, fondo, grid, footer: todo editable aquí.
+  // ────────────────────────────────────────────────────────────────────────────
+  layout: {
+    maxWidth: 1100, // .wrap
+    header: {
+      sticky: true,
+      glass: { blur: "8px", saturate: 1.2 },
+      bg: "rgba(255,255,255,.55)",
+      borderColor: "rgba(0,0,0,.08)",
+      hideOnScroll: true,
+      nav: { linkActiveBg: "#e9efff", linkActiveText: "#2563eb" }
+    },
+    pageBackground: {
+      image: "https://raw.githubusercontent.com/dla-tech/Media-privada/refs/heads/main/IMG_7782.jpeg",
+      css: "center/cover no-repeat",
+      overlay: "linear-gradient(180deg,rgba(8,11,20,.35),rgba(8,11,20,.6))"
+    },
+    footer: { text: "© 2025 — Iglesia. Todos los derechos reservados.", color: "#e5e7eb" }
+  },
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // LOADER / PANTALLA DE CARGA
+  // NOTA: Imagen de pantalla completa + tiempos. Activa extras (texto, botón).
+  // ────────────────────────────────────────────────────────────────────────────
+  loader: {
+    visible: true,
+    image: "https://raw.githubusercontent.com/dla-tech/Media-privada/refs/heads/main/IMG_8023.jpeg",
+    objectFit: "cover",
+    objectPosition: "50% 45%",
+    minVisibleMs: 1500,
+    fadeMs: 2000,
+    hardFallbackMs: 4500, // 1500 + 2000 + 1500
+    text: { enabled: false, content: "", color: "#FFFFFF", shadow: "0 6px 24px rgba(0,0,0,.35)" },
+    extraButton: {
+      enabled: false, label: "", href: "",
+      variant: "filled", bg: "#facc15", color: "#000", border: ""
+    },
+    effectCanvas: { enabled: false }
+  },
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // LOGO FIJO GIRATORIO
+  // NOTA: Controla la imagen fija y su animación sin tocar estilos.
+  // ────────────────────────────────────────────────────────────────────────────
+  floatingLogo: {
+    src: "https://raw.githubusercontent.com/dla-tech/Media-privada/refs/heads/main/Logo%20de%20la%20iglesia%20PIPJM-2.png",
+    position: { bottom: "20px", left: "20px", width: "80px" },
+    spin: { enabled: true, axis: "Y", speed: "6s", timing: "linear" }
+  },
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // NAVEGACIÓN / BOTONES SUPERIORES
+  // NOTA: Puedes renombrar/mostrar/ocultar enlaces del header y añadir nuevos.
+  // ────────────────────────────────────────────────────────────────────────────
+  nav: {
+    links: [
+      { id: "calendarios", label: "Calendarios", href: "#calendarios", active: false },
+      { id: "redes", label: "Redes sociales", href: "#redes", active: false },
+      { id: "ubicacion-templo", label: "Ubicación del templo", href: "#ubicacion-templo", active: false },
+      { id: "ubicacion-cultos", label: "Ubicación de los cultos", href: "#ubicacion-cultos", active: false },
+      { id: "proposito", label: "Propósito", href: "#proposito", active: false }
+    ],
+    purposeButton: {
+      enabled: false, label: "Propósito", href: "#proposito",
+      variant: "filled", bg: "#2563eb", color: "#ffffff", border: ""
+    },
+    installButton: {
+      id: "btn-install", visible: true, label: "Descargar Web",
+      styles: { bg: "#7c3aed", color: "#fff" }
+    },
+    notifButton: {
+      id: "btn-notifs",
+      visibleInStandalone: true,
+      labels: { default: "NOTIFICACIONES", ok: "✅ NOTIFICACIONES", denied: "🚫 NOTIFICACIONES" },
+      colors: { base: "#ef4444", ok: "#22c55e" }
     }
-  }
+  },
 
-  /* TABLET+ */
-  @media (min-width: 768px){
-    .nav{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:10px 16px; }
-    .nav .spacer{ flex:1; display:block; }
-    .nav a{ padding:10px 12px; min-width:auto; background:transparent; border:0; }
-    .nav a.active{ background:#e9efff; border:0; }
-  }
-
-  .wrap{max-width:1100px; margin:0 auto; padding:22px 16px}
-  .card{background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow); padding:14px}
-  h1,h2{color:#fff; text-align:center; margin:10px 0 14px}
-  section{scroll-margin-top:80px; margin-bottom:22px}
-  iframe{border:0; width:100%; border-radius:10px}
-  .grid{display:grid; gap:12px}
-  @media(min-width:720px){
-    .grid.cols-2{grid-template-columns:1fr 1fr}
-    .grid.cols-3{grid-template-columns:repeat(3,1fr)}
-  }
-  .grid.cols-1{grid-template-columns:1fr}
-  .subhead{margin:0 0 6px; font-weight:700; color:#0b1421}
-
-  .btn{display:block; text-align:center; text-decoration:none; padding:14px 16px;
-       border-radius:12px; font-weight:700; color:#fff}
-  .btn-g{background:#34C759}
-  .btn-i{background:#4285F4}
-  .btn-d{background:#0f172a}
-  .btn-y{background:#facc15; color:#000;}
-  .btn-yt{background:#ff0000; color:#fff;}
-
-  /* Live YouTube styles */
-  .live-wrap { display:none; margin-top:10px; border-radius:12px; overflow:hidden; box-shadow:0 6px 16px rgba(0,0,0,.2); background:#000 }
-  .live-head { display:flex; align-items:center; gap:8px; padding:10px 12px; color:#fff; font-weight:800; letter-spacing:.2px; background:linear-gradient(90deg,#b91c1c,#ef4444) }
-  .live-dot { width:10px; height:10px; border-radius:999px; background:#fff; box-shadow:0 0 8px rgba(255,255,255,.9) }
-  .live-player { position:relative; aspect-ratio:16/9; background:#000 }
-  .live-player iframe { position:absolute; inset:0; width:100%; height:100%; border:0 }
-  .live-cta { display:block; padding:10px 12px; text-align:center; text-decoration:none; color:#fff; font-weight:700; background:#111 }
-
-  .note{font-size:.92em; opacity:.8}
-  .list{margin:0; padding-left:18px}
-  .footer{color:#e5e7eb; text-align:center; font-size:.9em; padding:26px 0}
-
-  /* Modal contacto */
-  .contact-modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); align-items:center; justify-content:center; z-index:10000; }
-  .contact-modal .modal-content { background:#fff; padding:20px; border-radius:12px; text-align:center; max-width:300px; width:90%; box-shadow:0 6px 16px rgba(0,0,0,.25); }
-  .contact-modal .btn { display:block; margin:10px 0; text-decoration:none; padding:12px; border-radius:8px; color:#fff; font-weight:600; }
-  .contact-modal .btn-d { display:block; margin:10px 0; padding:12px; border-radius:8px; color:#fff; font-weight:600; background:#444; border:none; width:100%; text-align:center; }
-
-  /* ===== Promo GRID (ajustado) ===== */
-  .promos-wrap{
-    /* Mantener simetría y NO exceder el ancho del calendario (.wrap=1100px) */
-    width: 100%;
-    max-width: 860px;            /* más angosto que el calendario */
-    margin: clamp(12px, 3vw, 28px) auto;
-  }
-  .promo-grid{
-    --gap: clamp(10px, 2vw, 20px);
-    --card-radius: 14px;
-    --shadow: 0 8px 28px rgba(0,0,0,.14);
-    display: grid;
-    gap: var(--gap);
-    grid-template-columns: repeat(auto-fit, minmax(var(--min, 260px), 1fr));
-    justify-content: center;     /* centra columnas cuando “sobran” */
-    align-items: start;
-    justify-items: center;       /* centra las tarjetas dentro de su celda */
-  }
-  /* Reglas por cantidad: 1 centrada, 2 columnas iguales, 3+ mosaico */
-  .promos-wrap.one  .promo-grid{ grid-template-columns: min(520px, 100%); }
-  .promos-wrap.two  .promo-grid{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .promos-wrap.many .promo-grid{ grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
-
-  @media (max-width: 640px){
-    .promos-wrap{ max-width: 94vw; }
-    .promos-wrap.one  .promo-grid{ grid-template-columns: min(480px, 100%); }
-    .promos-wrap.two  .promo-grid{ grid-template-columns: 1fr 1fr; }
-  }
-
-  .promo-card{
-    position: relative;
-    width: 100%;
-    border-radius: 0;           /* sin borde de tarjeta para no recortar */
-    overflow: visible;          /* no recortar la imagen */
-    box-shadow: none;           /* sombra se aplica a la imagen */
-    transition: transform .18s ease;
-    isolation: isolate;
-  }
-  .promo-card:hover{
-    transform: translateY(-2px);
-  }
-  .promo-card:hover .promo-media img{
-    box-shadow: 0 10px 34px rgba(0,0,0,.20);
-  }
-  .promo-link{ display:block; text-decoration:none; color:inherit; }
-  .promo-media{ position:relative; width:100%; overflow:visible; }
-  .promo-media img{
-    width:100%; height:auto; object-fit:contain; display:block;
-    border-radius: var(--card-radius);
-    box-shadow: var(--shadow);
-    user-select:none; -webkit-user-drag:none;
-  }
-  /* Neutralizar cualquier overlay/pseudo-elemento sobre la imagen */
-  .promo-media::after,
-  .promo-media::before{
-    content:none !important;
-    display:none !important;
-  }
-  .promo-media .overlay,
-  .promo-media .caption,
-  .promo-media .promo-meta{
-    display:none !important;
-    background:transparent !important;
-  }
-
-  /* Título DEBAJO de la imagen, sin recuadro negro */
-  .promo-title{
-    padding:8px 6px 10px;
-    text-align:center;
-    font: 800 14px/1.25 system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif; /* bold ya en 800 */
-    color: #fff;  /* texto blanco */
-    background: transparent;
-  }
-  @media (max-width: 520px){
-    .promo-title{ font-weight:700; font-size:13px; }
-  }
-
-  /* Compat: ocultar cualquier franja/overlay heredado */
-  .promo-meta{
-    display:none !important; /* ocultar cualquier franja/overlay heredado */
-  }
-
-  /* Botón único amarillo debajo del grid */
-  .promo-actions{
-    display:flex; justify-content:center; padding:12px 0 6px;
-  }
-  .promo-dl{
-    appearance:none; border:none; cursor:pointer;
-    padding:12px 18px; border-radius:10px;
-    font-weight:800; font-size:14px; letter-spacing:.1px;
-    background:#facc15; color:#000;
-    box-shadow:0 2px 8px rgba(0,0,0,.25);
-  }
-  .promo-dl:active{ transform: translateY(1px); }
-
-  /* Botón de NOTIFICACIONES solo visible en app (standalone) */
-  #btn-notifs { background:#ef4444; color:#fff; border-color: rgba(0,0,0,.08); }
-  #btn-notifs.loading { opacity:.85; }
-  #btn-notifs.ok { background:#22c55e; }
-  @media (display-mode: standalone) {
-    #btn-install { display:none !important; }
-    #btn-notifs { display:block !important; }
-  }
-
-  /* Logo fijo girando */
-  .fixed-logo {
-    position: fixed; bottom: 20px; left: 20px; width: 80px; height: auto; z-index: 9999; pointer-events: none;
-    animation: spinY 6s linear infinite; transform-style: preserve-3d;
-  }
-  @keyframes spinY { 0% { transform: rotateY(0deg); } 100% { transform: rotateY(360deg); } }
-</style>
-
-<style id="preload-style">
-  body > *:not(#loader) { visibility: hidden; }
-</style>
-<script> document.documentElement.classList.add('loading'); </script>
-<link rel="manifest" href="./manifest.json">
-<meta name="theme-color" content="#0b1421">
-<link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png">
-<link rel="apple-touch-icon" sizes="512x512" href="icons/icon-512.png">
-</head>
-<body>
-
-  <div id="loader" aria-label="Pantalla de carga">
-    <img src="https://raw.githubusercontent.com/dla-tech/Media-privada/refs/heads/main/IMG_8023.jpeg"
-         alt="Pantalla de carga"
-         style="position:absolute; inset:0; width:100vw; height:100vh; object-fit:cover; z-index:1; user-select:none; -webkit-user-drag:none;">
-  </div>
-
-<header>
-  <nav class="nav">
-    <div class="spacer"></div>
-    <a href="#calendarios" class="navlink">Calendarios</a>
-    <a href="#redes" class="navlink">Redes sociales</a>
-    <a href="#ubicacion-templo" class="navlink">Ubicación del templo</a>
-    <a href="#ubicacion-cultos" class="navlink">Ubicación de los cultos</a>
-    <a href="#proposito" class="navlink">Propósito</a>
-    <a id="btn-notifs" class="navlink" href="#" style="display:none; font-weight:800;">NOTIFICACIONES</a>
-    <a id="btn-install" class="navlink" href="#" style="background:#7c3aed; color:#fff; border-color: rgba(0,0,0,.08); font-weight:800;">Descargar Web</a>
-  </nav>
-</header>
-
-<main class="wrap">
-
-  <!-- CALENDARIOS -->
-  <section id="calendarios">
-    <h1 style="font-size:1.35em; line-height:1.25; font-weight:700;">
-      Primera Iglesia Pentecostal de Jesucristo de Maunabo, P.R. Inc.
-    </h1>
-
-    <!-- === PROMOS GRID === -->
-    <section id="promos" class="promos-wrap" style="display:none;">
-      <div id="promoGrid" class="promo-grid"></div>
-      <div class="promo-actions"><button id="btn-descargar-todo" class="promo-dl">⬆️DESCARGAR PROMOS⬆️</button></div>
-    </section>
-
-    <div class="card" style="margin-bottom:12px">
-      <iframe
-        src="https://calendar.google.com/calendar/embed?src=72086005a3ac9a324642e6977fb8f296d531c3520b03c6cf342495ed215e0186%40group.calendar.google.com&ctz=America%2FPuerto_Rico&bgcolor=%23f4f7fb&hl=en"
-        title="Calendario Google" loading="lazy" referrerpolicy="no-referrer-when-downgrade" height="600">
-      </iframe>
-    </div>
-
-    <div class="grid cols-3">
-      <a id="btn-gcal" class="btn btn-g" href="#" target="_self">🟢 Añadir en Google Calendar (Android/PC)</a>
-      <a id="btn-ios" class="btn btn-i" href="#" target="_self">📱 Añadir en Apple Calendar (iPhone/Mac)</a>
-      <a id="btn-download" class="btn btn-y" href="#" target="_self">⬇️ Descargar Google Calendar</a>
-    </div>
-
-    <!-- Modal de elección para Google Calendar -->
-    <div id="gcal-choice" class="contact-modal">
-      <div class="modal-content">
-        <h3 style="margin:0 0 10px">¿Cómo quieres abrirlo?</h3>
-        <a id="gcal-open-web" class="btn btn-g" href="#">🌐 Abrir en la web</a>
-        <button id="gcal-open-app" class="btn-d">📱 Abrir en la app</button>
-        <button id="gcal-cancel" class="btn-d" style="background:#6b7280">Cancelar</button>
-      </div>
-    </div>
-
-    <p class="card note" style="margin-top:12px">
-      📌 Todo cambio en la programación de la iglesia se reflejará automáticamente en tu calendario.
-    </p>
-  </section>
-
-  <!-- REDES SOCIALES -->
-  <section id="redes">
-    <h2>Redes sociales</h2>
-    <div class="card">
-      <div class="grid cols-1">
-        <a class="btn btn-yt" href="https://youtube.com/@pipjm9752?si=r3nrs4hxzxk-OVmI" target="_blank" rel="noopener">▶️ YouTube</a>
-        <!-- LIVE (auto) -->
-        <div id="live-wrap" class="live-wrap">
-          <div class="live-head"><span class="live-dot"></span> EN VIVO AHORA</div>
-          <div class="live-player" id="live-player"></div>
-          <a id="live-cta" class="live-cta" href="https://www.youtube.com/@pipjm9752/live" target="_blank" rel="noopener">Ver en YouTube</a>
-        </div>
-        <a class="btn btn-d" href="mailto:pipjm1@gmail.com">✉️ pipjm1@gmail.com</a>
-      </div>
-    </div>
-  </section>
-
-  <!-- UBICACIÓN TEMPLO -->
-  <section id="ubicacion-templo">
-    <h2>Ubicación del templo</h2>
-    <div class="card">
-      <p><strong>Dirección:</strong> <a href="https://maps.app.goo.gl/4R9ZXAmw1ZcnBTL49?g_st=ipc" target="_blank" rel="noopener">Ver en Google Maps</a></p>
-      <a href="https://maps.app.goo.gl/4R9ZXAmw1ZcnBTL49?g_st=ipc" target="_blank" rel="noopener">
-        <img src="https://raw.githubusercontent.com/dla-tech/Media-privada/refs/heads/main/IMG_7782.jpeg" alt="Ubicación del templo" style="width:100%; border-radius:10px; box-shadow:0 4px 10px rgba(0,0,0,.25)">
-      </a>
-    </div>
-  </section>
-
-  <!-- UBICACIÓN CULTOS -->
-  <section id="ubicacion-cultos">
-    <h2>Ubicación de cultos evangelísticos</h2>
-    <div class="card">
-      <p>Algunos servicios se realizan en ubicaciones distintas:</p>
-      <div class="grid cols-2">
-        <div>
-          <p class="subhead"><span id="lbl-martes">Martes</span></p>
-          <p><strong id="title-martes">Culto evangelístico</strong><br><span id="addr-martes">(TODO: dirección)</span></p>
-          <iframe src="https://www.google.com/maps?q=Maunabo%20Puerto%20Rico&output=embed"
-                  height="260" loading="lazy" title="Culto martes"></iframe>
-        </div>
-        <div>
-          <p class="subhead"><span id="lbl-miercoles">Miércoles</span></p>
-          <p><strong id="title-miercoles">Culto evangelístico</strong><br><span id="addr-miercoles">(TODO: dirección)</span></p>
-          <iframe src="https://www.google.com/maps?q=Maunabo%20Puerto%20Rico&output=embed"
-                  height="260" loading="lazy" title="Culto miércoles"></iframe>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- PROPOSITO -->
-  <section id="proposito">
-    <h2>Propósito</h2>
-    <div class="card">
-      <p><strong>Nuestro propósito</strong> es: “Llevar el evangelio a toda criatura, dar un mensaje de esperanza, mostrar el amor de Dios al mundo y ayudar al necesitado.”</p>
-      <h3 style="margin-top:16px; font-size:1.1em; color:#0b1421;">Horarios de cultos y actividades</h3>
-      <ul class="list">
-        <li><strong>Lunes:</strong> Culto de oración en el templo — 7:00 p.m.</li>
-        <li><strong>Martes y Miércoles:</strong> Cultos evangelísticos en Maunabo y lugares limítrofes — 7:00 p.m.</li>
-        <li><strong>Jueves:</strong> Culto de la Sociedad de Niños, oración o estudio bíblico — 7:00 p.m.</li>
-        <li><strong>Viernes:</strong> Culto de las Sociedades de Damas, Caballeros y Jóvenes — 7:00 p.m.</li>
-        <li><strong>Sábado:</strong> Altar familiar. (Una vez al mes, ayuno congregacional) — 6:00 a.m.</li>
-        <li><strong>Domingo:</strong>
-          <ul>
-            <li>Oración/Ayuno — desde las 6:00 a.m.</li>
-            <li>Apertura de Escuela Bíblica — 8:45 a.m.</li>
-            <li>Cierre de Escuela Bíblica — 10:45 a.m.</li>
-            <li>Comienzo del culto de adoración — 11:15 a.m.</li>
-          </ul>
-        </li>
-      </ul>
-    </div>
-  </section>
-
-  <!-- CONTACTO -->
-  <div class="footer">© 2025 — Iglesia. Todos los derechos reservados.</div>
-</main>
-
-<!-- ===== Etiquetas dinámicas Mar/Mié — Semana con DOMINGO como inicio ===== -->
-<script>
-(function(){
-  const tz = "America/Puerto_Rico";
-  const now = new Date();
-  const pr = new Date(now.toLocaleString('en-US', { timeZone: tz }));
-
-  const dowSun0 = pr.getDay(); // 0=Dom,1=Lun,...6=Sáb
-  const sunday = new Date(pr); sunday.setHours(0,0,0,0); sunday.setDate(pr.getDate() - dowSun0);
-
-  const tuesday = new Date(sunday);   tuesday.setDate(sunday.getDate() + 2);
-  const wednesday = new Date(sunday); wednesday.setDate(sunday.getDate() + 3);
-
-  const elMartes = document.getElementById('lbl-martes');
-  const elMiercoles = document.getElementById('lbl-miercoles');
-  if (elMartes)    elMartes.textContent    = `Martes ${tuesday.getDate()}`;
-  if (elMiercoles) elMiercoles.textContent = `Miércoles ${wednesday.getDate()}`;
-})();
-</script>
-
-<!-- === Leer ICS desde GitHub y actualizar títulos + direcciones + mapas (semana desde DOMINGO) === -->
-<script>
-(function(){
-  // 🔧 CAMBIA AQUÍ si tu ruta es distinta:
-  const ICS_URL = "https://raw.githubusercontent.com/dla-tech/Media-privada/e3d2ade1012edc154134d5aeb3af46a5755643e5/calendarios/calendario.ics";
-  const TZ = 'America/Puerto_Rico';
-
-  // Utils
-  const toPR = d => new Date(d.toLocaleString('en-US',{timeZone:TZ}));
-  const startOfDay = d => (d=new Date(d), d.setHours(0,0,0,0), d);
-  const addDays = (d,n)=> (d=new Date(d), d.setDate(d.getDate()+n), d);
-  const sameDayPR = (a,b)=>{a=toPR(a);b=toPR(b);
-    return a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate()};
-  const toISO = d => {
-    const y = d.getFullYear();
-    const m = String(d.getMonth()+1).padStart(2,'0');
-    const da = String(d.getDate()).padStart(2,'0');
-    return `${y}-${m}-${da}`;
-  };
-
-  // Semana con DOMINGO como inicio
-  const now = new Date();
-  const prNow = toPR(now);
-  const dowSun0 = prNow.getDay(); // 0..6
-  const sunday = startOfDay(addDays(prNow, -dowSun0));
-  const tuesday = addDays(sunday, 2);
-  const wednesday = addDays(sunday, 3);
-
-  // Parser ICS
-  const unfold = txt => txt.replace(/(?:\r\n|\n)[ \t]/g,'');
-  const getLineVal = (block, prop) => {
-    const m = block.match(new RegExp('^'+prop+'(?:;[^:\\n]*)?:(.*)$','mi'));
-    return m ? m[1].trim() : null;
-  };
-  function parseDTSTART(block){
-    const m = block.match(/^DTSTART([^:\n]*)?:([^\n]+)$/mi);
-    if (!m) return null;
-    const params = (m[1]||'').toUpperCase();
-    const val = m[2].trim();
-
-    const dOnly = val.match(/^(\d{4})(\d{2})(\d{2})$/);
-    if (/VALUE=DATE/.test(params) && dOnly){
-      const [_,Y,M,D] = dOnly; return new Date(Date.UTC(+Y,+M-1,+D,4,0,0)); // all-day -> ~00:00 PR
+  // ────────────────────────────────────────────────────────────────────────────
+  // CALENDARIOS / ENLACES (iCloud, Google)
+  // NOTA: Todo lo de los botones de suscripción/apertura se controla aquí.
+  // ────────────────────────────────────────────────────────────────────────────
+  calendars: {
+    icloudWebcal:
+      "webcal://p158-caldav.icloud.com/published/2/MTYyMzg4NDUwMjAxNjIzOFc_RCw-iCOSeM_LMqkWZcQMuX9sTzZF-PyrU9d06Oy4V0VhxUSZVqCmqzUsygyCHgAllfl2DFW34WcFi8EvPD8",
+    google: {
+      calendarId:
+        "72086005a3ac9a324642e6977fb8f296d531c3520b03c6cf342495ed215e0186@group.calendar.google.com",
+      embedUrl:
+        "https://calendar.google.com/calendar/embed?src=72086005a3ac9a324642e6977fb8f296d531c3520b03c6cf342495ed215e0186%40group.calendar.google.com&ctz=America%2FPuerto_Rico&bgcolor=%23f4f7fb&hl=en",
+      webUrlPrefix: "https://calendar.google.com/calendar/u/0/r?cid="
     }
-    const dt = val.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z)?$/);
-    if (dt){
-      const [_,Y,M,D,hh,mm,ss,Z] = dt;
-      if (/TZID=AMERICA\/PUERTO_RICO/.test(params))
-        return new Date(Date.UTC(+Y,+M-1,+D,+hh+4,+mm,+ss));
-      if (Z) return new Date(Date.UTC(+Y,+M-1,+D,+hh,+mm,+ss));
-      return new Date(Date.UTC(+Y,+M-1,+D,+hh+4,+mm,+ss));
+  },
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // ICS (PARSEAR EVENTOS) — SIGUE EXTERNO
+  // NOTA: URL ICS en GitHub + TZ y labels para encabezados.
+  // ────────────────────────────────────────────────────────────────────────────
+  ics: {
+    controlledOutside: true,
+    url:
+      "https://raw.githubusercontent.com/dla-tech/Media-privada/e3d2ade1012edc154134d5aeb3af46a5755643e5/calendarios/calendario.ics",
+    timeZone: "America/Puerto_Rico",
+    labels: { martesPrefix: "Martes", miercolesPrefix: "Miércoles" }
+  },
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // PROMOS (EXTERNO POR JSON)
+  // NOTA: Declaras el manifest actual y algunas opciones de UI.
+  // ────────────────────────────────────────────────────────────────────────────
+  promos: {
+    manifestUrl:
+      "https://raw.githubusercontent.com/dla-tech/Media-privada/refs/heads/main/Promo/Promos.json",
+    grid: {
+      minWidthByCount: { "1": "480px", "2": "300px", "<=4": "280px", "<=6": "240px", "<=9": "200px", ">9": "180px" },
+      titleColor: "#ffffff",
+      showDownloadAllButton: true,
+      downloadAllLabel: "⬆️DESCARGAR PROMOS⬆️"
     }
-    if (dOnly){
-      const [_,Y,M,D] = dOnly; return new Date(Date.UTC(+Y,+M-1,+D,4,0,0));
+  },
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // YOUTUBE LIVE (DETECTAR EN VIVO)
+  // NOTA: Controla handle y, si quieres, el channelId para embeber el player.
+  // ────────────────────────────────────────────────────────────────────────────
+  youtube: {
+    handle: "@pipjm9752",
+    channelId: "",       // si lo añades, el embed se arma solo
+    liveUrlSuffix: "/live"
+  },
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // MAPAS / UBICACIONES
+  // NOTA: Mapas embebidos se ajustan según LOCATION del ICS; defaults por si falta.
+  // ────────────────────────────────────────────────────────────────────────────
+  maps: {
+    defaultTownFallback: "Maunabo, Puerto Rico",
+    municipios: ["Maunabo","Emajagua","Yabucoa","Humacao","Las Piedras","Patillas","Guayama","San Lorenzo"]
+  },
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // FIREBASE / NOTIFICACIONES
+  // NOTA: Mismo config actual (compat) + VAPID + colección donde guardas tokens.
+  // ────────────────────────────────────────────────────────────────────────────
+  firebase: {
+    app: {
+      apiKey: "AIzaSyAHQjMp8y9uaxAd0nnmCcVaXWSbij3cvEo",
+      authDomain: "miappiglesia-c703a.firebaseapp.com",
+      projectId: "miappiglesia-c703a",
+      storageBucket: "miappiglesia-c703a.appspot.com",
+      messagingSenderId: "501538616252",
+      appId: "1:501538616252:web:d6ead88050c4dd7b09b1b9"
+    },
+    vapidPublicKey: "BGEv9r_6M-xZbyqhUzYYgMT9N6cMtJvLAmE64_H2WoB_tJA_L0qWlTQC3Lhz5tCnpbEd267QMHYvjASiHCOb7gU",
+    firestore: {
+      enabled: true,
+      tokensCollection: "fcmTokens"
+    },
+    serviceWorkers: {
+      app: "./service-worker.js",
+      fcm: "./firebase-messaging-sw.js"
     }
-    return null;
+  },
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // PWA (INSTALACIÓN)
+  // NOTA: Textos/visibilidad y fallback de tutorial si no hay beforeinstallprompt.
+  // ────────────────────────────────────────────────────────────────────────────
+  pwa: {
+    install: {
+      showButton: true,
+      buttonId: "btn-install",
+      fallbackTutorial:
+        "Paso 1: Presiona los tres puntos (abajo derecha o arriba)\n\nPaso 2: presiona \"Compartir\"\n\nPaso 3: Desliza hacia abajo selecciona \"Agregar a Inicio\"\n\nPaso 4: Presiona (Boton Azul) \"Agregar\""
+    }
+  },
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // MENSAJES / BANNERS GLOBAL
+  // NOTA: Mensaje visible en la web que podrás activar sin tocar el index.
+  // ────────────────────────────────────────────────────────────────────────────
+  messages: {
+    globalNotice: {
+      enabled: false,
+      content: "",           // HTML simple permitido
+      href: "",
+      target: "_self",
+      bg: "#2563eb",
+      color: "#ffffff"
+    }
+  },
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // CAPAS / Z-INDEX
+  // NOTA: Controlas prioridades de apilado (loader arriba del todo, etc.).
+  // ────────────────────────────────────────────────────────────────────────────
+  layers: {
+    zIndex: {
+      header: 50,
+      live: 10,
+      modal: 10000,
+      loader: 100000,
+      floatingLogo: 9999
+    }
+  },
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // RESPONSIVE
+  // NOTA: Breakpoints por si quieres customizar sin tocar CSS.
+  // ────────────────────────────────────────────────────────────────────────────
+  responsive: {
+    breakpoints: { xs: 0, sm: 480, md: 768, lg: 1024, xl: 1280 }
   }
-
-  async function loadICS(){
-    try{
-      const url = ICS_URL + '?t=' + Date.now(); // anti-caché
-      const res = await fetch(url, { cache: 'no-store' });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      const icsText = await res.text();
-
-      const t = unfold(icsText);
-      const blocks = t.split(/BEGIN:VEVENT/).slice(1).map(b=>'BEGIN:VEVENT'+b.split('END:VEVENT')[0]);
-
-      let tueEv=null, wedEv=null;
-      for (const ev of blocks){
-        const dt = parseDTSTART(ev); if (!dt) continue;
-        const evObj = {
-          summary : getLineVal(ev,'SUMMARY'),
-          location: getLineVal(ev,'LOCATION'),
-          url     : getLineVal(ev,'URL')
-        };
-        if (!tueEv && sameDayPR(dt,tuesday))   tueEv = evObj;
-        if (!wedEv && sameDayPR(dt,wednesday)) wedEv = evObj;
-        if (tueEv && wedEv) break;
-      }
-
-      // Títulos y direcciones
-      const tTitle = document.getElementById('title-martes');
-      const wTitle = document.getElementById('title-miercoles');
-      const tAddr  = document.getElementById('addr-martes');
-      const wAddr  = document.getElementById('addr-miercoles');
-
-      if (tTitle && tueEv?.summary) tTitle.textContent = tueEv.summary;
-      if (wTitle && wedEv?.summary) wTitle.textContent = wedEv.summary;
-      if (tAddr  && tueEv?.location) tAddr.textContent = tueEv.location;
-      if (wAddr  && wedEv?.location) wAddr.textContent = wedEv.location;
-
-      // Mapas (normaliza LOCATION)
-      const tueIframe = document.querySelector('#ubicacion-cultos .grid.cols-2 > div:nth-child(1) iframe');
-      const wedIframe = document.querySelector('#ubicacion-cultos .grid.cols-2 > div:nth-child(2) iframe');
-
-      function normalizeLocation(raw){
-        if (!raw) return 'Maunabo, Puerto Rico';
-        let txt = String(raw).split(/[-–—/|]/).pop().trim();
-        txt = txt.replace(/\s*\(.*?\)\s*/g,' ').replace(/\s{2,}/g,' ').trim();
-        const municipios = ['Maunabo','Emajagua','Yabucoa','Humacao','Las Piedras','Patillas','Guayama','San Lorenzo'];
-        const hasMunicipio = municipios.some(m => new RegExp(`\\b${m}\\b`,`i`).test(txt));
-        if (hasMunicipio) {
-          if (!/puerto\s*rico/i.test(txt)) txt += ', Puerto Rico';
-          return txt;
-        }
-        return `${txt}, Maunabo, Puerto Rico`;
-      }
-
-      function setMap(iframeEl, locationText, pinUrl) {
-        if (!iframeEl) return;
-        const query = normalizeLocation(locationText);
-        iframeEl.src   = 'https://www.google.com/maps?output=embed&q=' + encodeURIComponent(query);
-        iframeEl.title = 'Mapa: ' + query;
-
-        // Overlay clickeable para abrir Google Maps con misma query o URL del ICS
-        let overlay = iframeEl.parentElement.querySelector('.map-overlay');
-        if (!overlay) {
-          overlay = document.createElement('a');
-          overlay.className = 'map-overlay';
-          overlay.target = '_blank';
-          overlay.rel = 'noopener';
-          overlay.style.cssText = 'position:absolute;inset:0;z-index:5;';
-          const holder = iframeEl.parentElement;
-          const cs = getComputedStyle(holder);
-          if (cs.position === 'static') holder.style.position = 'relative';
-          holder.appendChild(overlay);
-        }
-        overlay.href = pinUrl || ('https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(query));
-      }
-
-      setMap(tueIframe, tueEv?.location, tueEv?.url || null);
-      setMap(wedIframe, wedEv?.location, wedEv?.url || null);
-
-    }catch(err){
-      console.error('No se pudo cargar el ICS desde GitHub:', err);
-    }
-  }
-
-  document.addEventListener('DOMContentLoaded', loadICS);
-})();
-</script>
-
-<!-- ===== Detectar si el canal está EN VIVO y mostrar reproductor debajo del botón de YouTube ===== -->
-<script>
-(function(){
-  const CHANNEL_HANDLE = '@pipjm9752';
-  const CHANNEL_ID = ''; // opcional
-
-  const liveBox = document.getElementById('live-wrap');
-  const livePlayer = document.getElementById('live-player');
-  const liveCta = document.getElementById('live-cta');
-  if (!liveBox) return;
-
-  const liveUrl = `https://www.youtube.com/${CHANNEL_HANDLE}/live`;
-  if (liveCta) liveCta.href = liveUrl;
-
-  const oembed = `https://www.youtube.com/oembed?url=${encodeURIComponent(liveUrl)}&format=json`;
-
-  fetch(oembed, { mode: 'cors' })
-    .then(r => {
-      if (!r.ok) throw new Error('offline');
-      return r.json();
-    })
-    .then(() => {
-      // EN VIVO
-      liveBox.style.display = 'block';
-      if (CHANNEL_ID) {
-        const src = `https://www.youtube.com/embed/live_stream?channel=${encodeURIComponent(CHANNEL_ID)}&autoplay=1&mute=1&rel=0&modestbranding=1`;
-        livePlayer.innerHTML = `<iframe src="${src}" title="YouTube live" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>`;
-      } else {
-        livePlayer.innerHTML = '';
-      }
-    })
-    .catch(() => {
-      // OFFLINE
-      liveBox.style.display = 'none';
-    });
-})();
-</script>
-
-<!-- ===== Botones de suscripción (iCloud/Google) ===== -->
-<script>
-document.getElementById("btn-ios").addEventListener("click", function(event) {
-  event.preventDefault();
-  const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
-  const url = "webcal://p158-caldav.icloud.com/published/2/MTYyMzg4NDUwMjAxNjIzOFc_RCw-iCOSeM_LMqkWZcQMuX9sTzZF-PyrU9d06Oy4V0VhxUSZVqCmqzUsygyCHgAllfl2DFW34WcFi8EvPD8";
-
-  if (window.self !== window.top && isIOS) {
-    window.top.location.href = url;
-  } else {
-    window.location.href = url;
-  }
-  setTimeout(function() {
-    alert("Si no se abrió el calendario, copia y pega este enlace en Safari:\n" + url);
-  }, 2500);
-});
-
-const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
-const isAndroid = /Android/i.test(navigator.userAgent);
-
-// --- Botón: mostrar opciones (Web/App) ---
-const CAL_ID  = "72086005a3ac9a324642e6977fb8f296d531c3520b03c6cf342495ed215e0186@group.calendar.google.com";
-const WEB_URL = "https://calendar.google.com/calendar/u/0/r?cid=" + encodeURIComponent(CAL_ID);
-// Dynamic Link que abre la app si está instalada y, si no, va a la tienda
-
-const choice    = document.getElementById("gcal-choice");
-const openWeb   = document.getElementById("gcal-open-web");
-const openApp   = document.getElementById("gcal-open-app");
-const cancelBtn = document.getElementById("gcal-cancel");
-
-function hideChoice(){ if (choice) choice.style.display = "none"; }
-function showChoice(){ if (choice) choice.style.display = "flex"; }
-
-document.getElementById("btn-gcal").addEventListener("click", function (event) {
-  event.preventDefault();
-  showChoice();
-});
-
-// Abrir en la web
-if (openWeb){
-  openWeb.addEventListener("click", function(e){
-    e.preventDefault();
-    hideChoice();
-    try {
-      const w = window.open(WEB_URL, "_blank", "noopener");
-      if (!w) { window.location.href = WEB_URL; }
-    } catch(_) { window.location.href = WEB_URL; }
-  });
-}
-
-// Abrir en la app
-if (openApp){
-  openApp.addEventListener("click", function(e){
-    e.preventDefault();
-    hideChoice();
-    const go = (url) => {
-      if (window.self !== window.top) { window.top.location.href = url; }
-      else { window.location.href = url; }
-    };
-
-    if (isAndroid) {
-      const PLAY = "https://play.google.com/store/apps/details?id=com.google.android.calendar";
-      const intentUrl =
-        'intent://calendar.google.com/calendar/r?cid=' + encodeURIComponent(CAL_ID) +
-        '#Intent;scheme=https;package=com.google.android.calendar;' +
-        'S.browser_fallback_url=' + encodeURIComponent(WEB_URL) + ';end';
-
-      let finished = false;
-      const finish = () => {
-        if (finished) return;
-        finished = true;
-        clearTimeout(toWeb);
-        clearTimeout(toStore);
-      };
-
-      go(intentUrl);
-
-      const onHidden = () => finish();
-      window.addEventListener('pagehide', onHidden, { once:true });
-      document.addEventListener('visibilitychange', () => { if (document.hidden) finish(); }, { once:true });
-      window.addEventListener('blur', onHidden, { once:true });
-
-      const toWeb = setTimeout(() => { if (!finished && !document.hidden) go(WEB_URL); }, 2200);
-      const toStore = setTimeout(() => { if (!finished && !document.hidden) go(PLAY); }, 4500);
-
-      return;
-    } else if (isIOS) {
-      const appUrl1 = "comgooglecalendar://?cid=" + encodeURIComponent(CAL_ID);
-      const appUrl2 = "googlecalendar://?cid=" + encodeURIComponent(CAL_ID);
-      const appStore = "https://apps.apple.com/app/google-calendar/id909319292";
-
-      let left = false;
-      const cleanup = () => {
-        document.removeEventListener("visibilitychange", onVis, true);
-        window.removeEventListener("pagehide", onHide, true);
-        window.removeEventListener("blur", onBlur, true);
-      };
-      const onVis  = () => { if (document.hidden) { left = true; cleanup(); } };
-      const onHide = () => { left = true; cleanup(); };
-      const onBlur = () => { left = true; cleanup(); };
-
-      document.addEventListener("visibilitychange", onVis, true);
-      window.addEventListener("pagehide", onHide, true);
-      window.addEventListener("blur", onBlur, true);
-
-      go(appUrl1);
-      setTimeout(() => { if (!left) go(appUrl2); }, 600);
-      setTimeout(() => { if (!left) go(appStore); }, 1800);
-
-    } else {
-      go(WEB_URL);
-    }
-  });
-}
-
-// Botón de descarga Google Calendar
-const btnDownload = document.getElementById("btn-download");
-if (btnDownload){
-  btnDownload.addEventListener("click", function(e){
-    e.preventDefault();
-    const PLAY = "https://play.google.com/store/apps/details?id=com.google.android.calendar";
-    const APPSTORE = "https://apps.apple.com/app/google-calendar/id909319292";
-    if (isAndroid) {
-      window.location.href = PLAY;
-    } else if (isIOS) {
-      window.location.href = APPSTORE;
-    } else {
-      window.location.href = "https://calendar.google.com/";
-    }
-  });
-}
-
-// Cerrar modal
-if (cancelBtn){
-  cancelBtn.addEventListener("click", function(){
-    hideChoice();
-  });
-}
-if (choice){
-  choice.addEventListener("click", function(e){
-    if (e.target === choice) hideChoice();
-  });
-}
-</script>
-
-<script>
-  // Oculta el header al bajar y lo muestra al subir (sin tocar el layout)
-  (function(){
-    const header = document.querySelector('header');
-    if (!header) return;
-
-    let lastY = window.scrollY || 0;
-    let downAccum = 0, upAccum = 0;
-    const THRESH = 12;      // píxeles de histéresis
-    const MIN_TOP = 24;     // no ocultar si estamos pegados al tope
-
-    window.addEventListener('scroll', () => {
-      const y = window.scrollY || 0;
-      const delta = y - lastY;
-
-      if (delta > 0){
-        downAccum += delta; upAccum = 0;
-        if (y > MIN_TOP && downAccum > THRESH){
-          header.classList.add('hide');
-        }
-      } else if (delta < 0){
-        upAccum += -delta; downAccum = 0;
-        if (upAccum > THRESH){
-          header.classList.remove('hide');
-        }
-        if (y <= 0){
-          header.classList.remove('hide');
-        }
-      }
-
-      lastY = y;
-    }, { passive: true });
-  })();
-</script>
-
-<script>
-(function(){
-  const MIN_VISIBLE = 1500;   // tiempo mínimo visible ANTES de empezar el fade
-  const FADE_TIME   = 2000;   // debe coincidir con el CSS (2000ms)
-  const HARD_FALLBACK = MIN_VISIBLE + FADE_TIME + 1500; // por si algo falla
-
-  const start = performance.now();
-
-  const done = () => {
-    document.documentElement.classList.remove('loading');
-    const el = document.getElementById('loader');
-    if (!el) return;
-    el.classList.add('hide');
-    const style = document.getElementById('preload-style');
-    if (style) style.remove();
-    setTimeout(() => { try { el.remove(); } catch(_){} }, FADE_TIME + 100);
-  };
-
-  window.addEventListener('load', () => {
-    const elapsed = performance.now() - start;
-    const wait = Math.max(0, MIN_VISIBLE - elapsed);
-    setTimeout(done, wait);
-  }, { once: true });
-
-  setTimeout(done, HARD_FALLBACK);
-})();
-</script>
-
-<!-- === Firebase para notificaciones (compat) === -->
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<script>
-  async function guardarTokenFCM(token){
-    try {
-      const ua = navigator.userAgent || '';
-      const ts = new Date().toISOString();
-      const db = window.db || firebase.firestore();
-      await db.collection('fcmTokens').doc(token).set(
-        { token, ua, ts },
-        { merge: true }
-      );
-      console.log('✅ Token guardado en Firestore');
-    } catch (e) {
-      console.error('❌ Error guardando token en Firestore:', e);
-    }
-  }
-</script>
-<script>
-  const firebaseConfig = {
-  apiKey: "AIzaSyAHQjMp8y9uaxAd0nnmCcVaXWSbij3cvEo",
-  authDomain: "miappiglesia-c703a.firebaseapp.com",
-  projectId: "miappiglesia-c703a",
-  storageBucket: "miappiglesia-c703a.appspot.com",
-  messagingSenderId: "501538616252",
-  appId: "1:501538616252:web:d6ead88050c4dd7b09b1b9"
 };
-  if (!window.firebase?.apps?.length) {
-    firebase.initializeApp(firebaseConfig);
-  }
-  const messaging = firebase.messaging();
-
-  if (!window.db) {
-    window.db = firebase.firestore();
-  }
-
-  const VAPID_KEY = "BGEv9r_6M-xZbyqhUzYYgMT9N6cMtJvLAmE64_H2WoB_tJA_L0qWlTQC3Lhz5tCnpbEd267QMHYvjASiHCOb7gU";
-
-  async function obtenerTokenFCM(){
-    if (!('Notification' in window)) {
-      console.warn('Este navegador no soporta Notification API');
-      return null;
-    }
-    if (Notification.permission !== 'granted') {
-      console.warn('Permiso de notificaciones no concedido todavía');
-      return null;
-    }
-    if (!VAPID_KEY || VAPID_KEY.includes('REEMPLAZA_CON_TU_VAPID_KEY')) {
-      alert('Falta configurar la clave pública VAPID en el código.');
-      return null;
-    }
-    try{
-      const opts = { vapidKey: VAPID_KEY };
-      if (window.fcmSW) opts.serviceWorkerRegistration = window.fcmSW;
-      else if (window.appSW) opts.serviceWorkerRegistration = window.appSW;
-      const token = await messaging.getToken(opts);
-      if (token) {
-        if (typeof guardarTokenFCM === 'function') {
-          guardarTokenFCM(token);
-        }
-      } else {
-        console.warn('No se obtuvo token (¿bloqueado por navegador?)');
-      }
-      return token;
-    }catch(err){
-      console.error('Error al obtener token FCM:', err);
-      return null;
-    }
-  }
-</script>
-<script>
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    // SW de la PWA
-    navigator.serviceWorker.register('./service-worker.js', { scope: './' })
-      .then((reg) => {
-        console.log('✅ Service Worker registrado con éxito:', reg);
-        window.appSW = reg;
-      })
-      .catch((err) => {
-        console.log('❌ Error al registrar Service Worker:', err);
-      });
-
-    // SW dedicado de Firebase Cloud Messaging (FCM)
-    navigator.serviceWorker.register('./firebase-messaging-sw.js', { scope: './' })
-      .then((reg) => {
-        console.log('✅ SW de FCM registrado:', reg);
-        window.fcmSW = reg;
-      })
-      .catch((err) => {
-        console.error('❌ Error registrando SW FCM', err);
-      });
-  }, { once: true });
-}
-</script>
-<script>
-(function(){
-  const btn = document.getElementById('btn-notifs');
-  if (!btn) return;
-
-  const isStandalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || (window.navigator.standalone === true);
-  if (!isStandalone) { btn.style.display = 'none'; return; }
-
-  function setState(){
-    const p = (typeof Notification !== 'undefined') ? Notification.permission : 'default';
-    if (p === 'granted'){
-      btn.classList.add('ok');
-      btn.textContent = '✅ NOTIFICACIONES';
-      if (typeof obtenerTokenFCM === 'function') { obtenerTokenFCM(); }
-    } else if (p === 'denied'){
-      btn.classList.remove('ok');
-      btn.textContent = '🚫 NOTIFICACIONES';
-    } else {
-      btn.classList.remove('ok');
-      btn.textContent = 'NOTIFICACIONES';
-    }
-  }
-
-  setState();
-
-  btn.addEventListener('click', async (e)=>{
-    e.preventDefault();
-    if (typeof Notification === 'undefined'){
-      alert('Este dispositivo no soporta notificaciones.');
-      return;
-    }
-    if (Notification.permission === 'granted'){
-      btn.classList.add('ok');
-      btn.textContent = '✅ NOTIFICACIONES';
-      if (typeof obtenerTokenFCM === 'function') { obtenerTokenFCM(); }
-      return;
-    }
-    const original = btn.textContent;
-    btn.classList.add('loading');
-    btn.textContent = '⏳ NOTIFICACIONES';
-
-    try{
-      const perm = await Notification.requestPermission();
-      if (perm === 'granted'){
-        btn.classList.add('ok');
-        btn.textContent = '✅ NOTIFICACIONES';
-        if (typeof obtenerTokenFCM === 'function') { obtenerTokenFCM(); }
-      } else if (perm === 'denied'){
-        btn.classList.remove('ok');
-        btn.textContent = '🚫 NOTIFICACIONES';
-      } else {
-        btn.classList.remove('ok');
-        btn.textContent = 'NOTIFICACIONES';
-      }
-    } catch(e){
-      console.warn('Permiso notificaciones falló:', e);
-      btn.classList.remove('ok');
-      btn.textContent = original;
-    } finally {
-      btn.classList.remove('loading');
-    }
-  });
-})();
-</script>
-
-<!-- ====== GRID de PROMOS desde GitHub JSON ====== -->
-<script>
-  // 🔧 CAMBIA AQUÍ si tu ruta es otra (ojo a mayúsculas/minúsculas y nombre de carpeta/archivo):
-  const PROMOS_MANIFEST = "https://raw.githubusercontent.com/dla-tech/Media-privada/refs/heads/main/Promo/Promos.json";
-
-  function computeMinWidthByCount(n){
-    if (n === 1) return "480px";  // una promo: más compacta y centrada (< calendario)
-    if (n === 2) return "300px";  // dos promos: columnas iguales y razonables
-    if (n <= 4) return "280px";
-    if (n <= 6) return "240px";
-    if (n <= 9) return "200px";
-    return "180px";
-  }
-
-  function renderPromos(promos){
-    const section = document.getElementById("promos");
-    const grid = document.getElementById("promoGrid");
-    if (!grid || !section) return;
-
-    // Colocar clases para controlar el layout por cantidad (1, 2 o 3+)
-    section.classList.toggle('one',  promos.length === 1);
-    section.classList.toggle('two',  promos.length === 2);
-    section.classList.toggle('many', promos.length >= 3);
-
-    // Mantener tamaños razonables pero dejar que las reglas .one/.two/.many manden
-    grid.style.setProperty("--min", computeMinWidthByCount(promos.length));
-    grid.innerHTML = promos.map((p, i) => `
-      <article class="promo-card" data-index="${i}">
-        <a class="promo-link" href="${p.img}" data-filename="${p.filename || `promo-${i+1}.jpg`}" download>
-          <div class="promo-media">
-            <img src="${p.img}" alt="${p.title ? p.title : `Promoción ${i+1}`}" loading="lazy" decoding="async">
-          </div>
-        </a>
-        ${p.title ? `<div class="promo-title">${p.title}</div>` : ""}
-      </article>
-    `).join("");
-
-    // Mostrar sección solo si hay promos activas
-    section.style.display = promos.length ? "block" : "none";
-
-    // botón general "descargar promos"
-    const btnAll = document.getElementById("btn-descargar-todo");
-    if (btnAll){
-      btnAll.onclick = async () => {
-        for (const p of promos) {
-          await downloadImage(p.img, p.filename || 'promocion.jpg');
-        }
-      };
-    }
-
-    enableReliableDownloads(grid);
-  }
-
-  async function downloadImage(url, filename){
-    try{
-      const res = await fetch(url, { cache: 'no-store' });
-      if(!res.ok) throw new Error("HTTP " + res.status);
-      const blob = await res.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = blobUrl; a.download = filename || 'promocion.jpg';
-      document.body.appendChild(a); a.click(); a.remove();
-      URL.revokeObjectURL(blobUrl);
-    }catch(err){
-      const a = document.createElement('a');
-      a.href = url; a.download = filename || 'promocion.jpg';
-      document.body.appendChild(a); a.click(); a.remove();
-      console.warn("Descarga directa (fallback):", err);
-    }
-  }
-
-  function enableReliableDownloads(scopeEl){
-    scopeEl.addEventListener('click', (e) => {
-      const a = e.target.closest('a.promo-link');
-      if(!a) return;
-      e.preventDefault();
-      const url = a.getAttribute('href');
-      const filename = a.dataset.filename || 'promocion.jpg';
-      downloadImage(url, filename);
-    });
-  }
-
-  async function loadPromosFromGitHubJSON(){
-    try{
-      const url = PROMOS_MANIFEST + "?t=" + Date.now(); // anti-caché
-      const res = await fetch(url, { cache: "no-store" });
-      if(!res.ok) throw new Error("HTTP " + res.status);
-      const data = await res.json();
-
-      const activos = (data || []).filter(p => p.active).sort((a,b)=> (a.order||0)-(b.order||0));
-
-      const promos = activos.map((p,i) => ({
-        title: p.title || "",
-        img: p.imageUrl || "",
-        filename: p.filename || `promo-${(p.order||i)+1}.jpg`,
-        aspectRatio: p.aspectRatio || ""
-      })).filter(p => !!p.img);
-
-      renderPromos(promos);
-
-    }catch(e){
-      console.error("No se pudo cargar Promos.json:", e);
-    }
-  }
-
-  document.addEventListener('DOMContentLoaded', loadPromosFromGitHubJSON);
-</script>
-
-</script>
-<!-- ===== PWA: Instalar en Android (Descargar Web) ===== -->
-<script>
-(function(){
-  const btn = document.getElementById('btn-install');
-  if(!btn) return;
-
-  // Si ya está instalada, ocultar (refuerzo extra además del CSS)
-  const isStandalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || (window.navigator.standalone === true);
-  if (isStandalone) { btn.style.display = 'none'; return; }
-
-  let deferredPrompt = null;
-
-  // Chrome/Android dispara este evento cuando la app es instalable
-  window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault();            // evita el mini-infobar
-    deferredPrompt = e;            // guardamos el evento para usarlo en el click
-    // Asegura que el botón esté visible y habilitado
-    btn.style.display = '';
-    btn.disabled = false;
-  });
-
-  // Click del botón: muestra el diálogo nativo de instalar
-  btn.addEventListener('click', async (ev) => {
-    ev.preventDefault();
-    if (!deferredPrompt) {
-      // Fallback: algunos navegadores no exponen beforeinstallprompt
-      alert("Paso 1: Presiona los tres puntos (abajo derecha o arriba)\n\nPaso 2: presiona \"Compartir\"\n\nPaso 3: Desliza hacia abajo selecciona \"Agregar a Inicio\"\n\nPaso 4: Presiona (Boton Azul) \"Agregar\"");
-      return;
-    }
-    deferredPrompt.prompt();
-    try {
-      const { outcome } = await deferredPrompt.userChoice; // 'accepted' | 'dismissed'
-      // console.log('Instalación:', outcome);
-    } catch(_){}
-    deferredPrompt = null; // el evento se puede usar una sola vez
-  });
-
-  // Cuando se instala, ocultamos el botón
-  window.addEventListener('appinstalled', () => {
-    btn.style.display = 'none';
-  });
-})();
-</script>
-
-<img src="https://raw.githubusercontent.com/dla-tech/Media-privada/refs/heads/main/Logo%20de%20la%20iglesia%20PIPJM-2.png" alt="Logo fijo" class="fixed-logo">
-</body>
-</html>
