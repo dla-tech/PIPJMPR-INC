@@ -1,34 +1,33 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Programaciones mensuales</title>
 
-  <!-- Config global -->
+  <!-- Config y tema -->
   <script src="./config/config.js"></script>
-
-  <!-- Tema (variables CSS) -->
   <link rel="stylesheet" href="./config/theme.css">
 
-  <!-- Manifest + icons -->
-  <link rel="manifest" href="./manifest.json">
+  <!-- PWA -->
+  <link rel="manifest" href="./manifest.json" />
+  <meta name="theme-color" content="#0b1421" />
   <link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png">
   <link rel="apple-touch-icon" sizes="512x512" href="icons/icon-512.png">
 
-  <!-- Meta dinámico (se sobrescribe desde config.js) -->
-  <meta name="theme-color" content="#0b1421">
+  <!-- Preload style (oculta hasta que cargue) -->
+  <style id="preload-style">body > *:not(#loader){visibility:hidden}</style>
+  <script>document.documentElement.classList.add('loading')</script>
 </head>
-<body class="loading">
-  
-  <!-- Pantalla de carga -->
-  <div id="loader"></div>
+<body>
+  <!-- Loader -->
+  <div id="loader" aria-label="Pantalla de carga"></div>
 
-  <!-- Header / Nav -->
+  <!-- Header -->
   <header id="header"></header>
 
-  <!-- Contenido principal -->
-  <main id="app">
+  <!-- Contenido -->
+  <main class="wrap" id="app">
     <section id="calendarios"></section>
     <section id="redes"></section>
     <section id="ubicacion-templo"></section>
@@ -38,12 +37,17 @@
   </main>
 
   <!-- Footer -->
-  <footer id="footer"></footer>
+  <footer id="footer" class="footer"></footer>
 
   <!-- Logo giratorio -->
-  <img id="floating-logo" alt="Logo fijo" />
+  <img id="floating-logo" alt="Logo fijo" class="fixed-logo" />
 
-  <!-- Scripts principales -->
+  <!-- SDK Firebase (compat) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+  <!-- App -->
   <script src="./app.js"></script>
 </body>
 </html>
