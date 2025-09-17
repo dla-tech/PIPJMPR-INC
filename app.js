@@ -456,24 +456,36 @@ nb.style.display = isStandaloneNow ? '' : 'none';
     },{once:true});
   }
 
-  async function guardarTokenFCM(token){
-    try{ if(!window.db) return; const ua=navigator.userAgent||''; const ts=new Date().toISOString();
-      await window.db.collection(cfg.firebase.firestore?.tokensCollection||'fcmTokens').doc(token).set({token,ua,ts},{merge:true});
-    }catch(e){ console.error('Error guardando token FCM:',e); }
+  async function obtenerTokenFCM(){
+  if (!('Notification' in window)) return null;
+  if (Notification.permission !== 'granted') return null;
+
+  // Espera a que el SW de FCM esté registrado
+  if (!window.fcmSW) {
+    // Si aún no lo registraste, hazlo aquí o espera a que el registro async termine
+    try {
+      const reg = await navigator.serviceWorker.register('./firebase-messaging-sw.js', { scope: './' });
+      window.fcmSW = reg;
+    } catch (e) {
+      console.error('No se pudo registrar FCM SW:', e);
+      return null;
+    }
   }
-  async function obtenerToken(){
-    if(!messaging) return null;
-    if(!('Notification' in window)) return null;
-    if(Notification.permission!=='granted') return null;
-    try{
-      const opts={ vapidKey: cfg.firebase.vapidPublicKey };
-      if(window.fcmSW) opts.serviceWorkerRegistration=window.fcmSW;
-      else if(window.appSW) opts.serviceWorkerRegistration=window.appSW;
-      const token=await messaging.getToken(opts);
-      if(token && cfg.firebase.firestore?.enabled!==false) await guardarTokenFCM(token);
-      return token;
-    }catch(e){ console.error('getToken FCM:',e); return null; }
+
+  const opts = {
+    vapidKey: VAPID_KEY,
+    serviceWorkerRegistration: window.fcmSW, // 👈 siempre el mismo
+  };
+
+  const token = await messaging.getToken(opts);
+  // Guarda solo si es nuevo
+  const prev = localStorage.getItem('fcm_token');
+  if (token && token !== prev) {
+    await guardarTokenFCM(token);   // tu función
+    localStorage.setItem('fcm_token', token);
   }
+  return token;
+}
 const nb = $('#'+(cfg.nav?.notifButton?.id||'btn-notifs'));
 if (!nb) return;
 
