@@ -9,7 +9,7 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim());
 });
 
-// Configuración de tu proyecto
+// Configuración de tu proyecto (igual que en app.js)
 firebase.initializeApp({
   apiKey: "AIzaSyAHQjMp8y9uaxAd0nnmCcVaXWSbij3cvEo",
   authDomain: "miappiglesia-c703a.firebaseapp.com",
@@ -21,12 +21,48 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
-// Estrategia A: dejar que el navegador maneje notification payloads.
-// No hacemos showNotification, así NO hay duplicados.
+// ✅ Iconos por defecto para Android (no afectan iOS Web Push)
+const DEFAULT_ICON  = "icons/icon-192.png";  // a color, 192x192
+const DEFAULT_BADGE = "icons/icon-72.png";   // blanco con transparencia, 72/96 px
+
+// === BACKGROUND: manejar DATA messages con nuestros defaults ===
 messaging.onBackgroundMessage((payload) => {
-  console.log('[FM A] Mensaje en background:', payload);
+  console.log('[FM] BG message:', payload);
+
+  // Estrategia A (tuya): si viene "notification", dejamos que el navegador la muestre (evita duplicados)
   if (payload?.notification) {
-    // navegador se encarga de mostrarla
     return;
   }
+
+  // Si viene como DATA message (Atajos/tu backend), mostramos nosotros con defaults
+  const d = payload?.data || {};
+  const title = d.title || 'Notificación';
+  const options = {
+    body: d.body || '',
+    icon: d.icon || DEFAULT_ICON,
+    badge: d.badge || DEFAULT_BADGE,
+    image: d.image || undefined,
+    data: {
+      url: d.url || '/',
+      // puedes añadir más campos si quieres
+    }
+  };
+
+  self.registration.showNotification(title, options);
+});
+
+// === CLICK EN NOTIFICACIÓN: abrir/enfocar la PWA ===
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const targetUrl = event.notification.data?.url || '/';
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      // Enfoca una ventana existente si hay
+      for (const client of list) {
+        if ('focus' in client) return client.focus();
+      }
+      // Si no hay, abre una nueva
+      if (self.clients.openWindow) return self.clients.openWindow(targetUrl);
+    })
+  );
 });
