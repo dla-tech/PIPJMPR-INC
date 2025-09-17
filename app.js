@@ -455,6 +455,7 @@ nb.style.display = isStandaloneNow ? '' : 'none';
       navigator.serviceWorker.register(cfg.firebase.serviceWorkers?.fcm||'./firebase-messaging-sw.js',{scope:'./'}).then(reg=>{window.fcmSW=reg}).catch(()=>{});
     },{once:true});
   }
+  window.__fcmTokenPromise = null; // candado para evitar llamadas simultáneas
 async function obtenerToken(){
   // ya tienes "messaging" arriba, lo reutilizamos
   if (!messaging) return null;
