@@ -450,42 +450,76 @@ nb.style.display = isStandaloneNow ? '' : 'none';
   const messaging = firebase.messaging ? firebase.messaging() : null;
 
   if('serviceWorker' in navigator){
-    window.addEventListener('load', ()=>{
-      navigator.serviceWorker.register(cfg.firebase.serviceWorkers?.app||'./service-worker.js',{scope:'./'}).then(reg=>{window.appSW=reg}).catch(()=>{});
-      navigator.serviceWorker.register(cfg.firebase.serviceWorkers?.fcm||'./firebase-messaging-sw.js',{scope:'./'}).then(reg=>{window.fcmSW=reg}).catch(()=>{});
-    },{once:true});
+    (async ()=>{
+      try{
+        // registra primero el SW de FCM y guárdalo
+        window.fcmSW = window.fcmSW || await navigator.serviceWorker.register(cfg.firebase.serviceWorkers?.fcm||'./firebase-messaging-sw.js',{scope:'./'});
+      }catch(e){ console.warn('No pude registrar FCM SW:', e); }
+      try{
+        window.appSW = window.appSW || await navigator.serviceWorker.register(cfg.firebase.serviceWorkers?.app||'./service-worker.js',{scope:'./'});
+      }catch(_){ }
+    })();
   }
 
-  async function obtenerTokenFCM(){
-  if (!('Notification' in window)) return null;
-  if (Notification.permission !== 'granted') return null;
-
-  // Espera a que el SW de FCM esté registrado
-  if (!window.fcmSW) {
-    // Si aún no lo registraste, hazlo aquí o espera a que el registro async termine
-    try {
-      const reg = await navigator.serviceWorker.register('./firebase-messaging-sw.js', { scope: './' });
-      window.fcmSW = reg;
-    } catch (e) {
-      console.error('No se pudo registrar FCM SW:', e);
+  async function ensureFCMSW(){
+    if (window.fcmSW) return window.fcmSW;
+    try{
+      window.fcmSW = await navigator.serviceWorker.register(cfg.firebase.serviceWorkers?.fcm||'./firebase-messaging-sw.js',{scope:'./'});
+      return window.fcmSW;
+    }catch(e){
+      console.warn('FCM SW no disponible:', e);
       return null;
     }
   }
 
-  const opts = {
-    vapidKey: VAPID_KEY,
-    serviceWorkerRegistration: window.fcmSW, // 👈 siempre el mismo
-  };
+  const TOKEN_KEY = 'fcm_token';
+  let getTokenInFlight = null;
 
-  const token = await messaging.getToken(opts);
-  // Guarda solo si es nuevo
-  const prev = localStorage.getItem('fcm_token');
-  if (token && token !== prev) {
-    await guardarTokenFCM(token);   // tu función
-    localStorage.setItem('fcm_token', token);
+  async function obtenerTokenFCM(){
+    if (getTokenInFlight) return getTokenInFlight; // evita llamadas paralelas
+
+    const run = (async () => {
+      if (!('Notification' in window)) return null;
+      if (Notification.permission !== 'granted') return null;
+      if (typeof firebase === 'undefined' || !firebase.messaging) return null;
+
+      // Asegura usar SIEMPRE el mismo SW de FCM (no el de la PWA)
+      const reg = await ensureFCMSW();
+      if (!reg) return null;
+      const messaging = firebase.messaging();
+      const vapid = (typeof VAPID_KEY !== 'undefined' ? VAPID_KEY : (cfg.firebase?.vapidKey || ''));
+      if (!vapid) {
+        console.warn('VAPID key no definida.');
+        return null;
+      }
+
+      let token = null;
+      try {
+        token = await messaging.getToken({
+          vapidKey: vapid,
+          serviceWorkerRegistration: window.fcmSW
+        });
+      } catch (e) {
+        console.warn('getToken falló:', e);
+        return null;
+      }
+      if (!token) return null;
+
+      const prev = localStorage.getItem(TOKEN_KEY);
+      if (token !== prev) {
+        try {
+          if (typeof guardarTokenFCM === 'function') {
+            await guardarTokenFCM(token);
+          }
+        } catch(_) {}
+        localStorage.setItem(TOKEN_KEY, token);
+      }
+      return token;
+    })();
+
+    try { getTokenInFlight = run; return await run; }
+    finally { getTokenInFlight = null; }
   }
-  return token;
-}
 const nb = $('#'+(cfg.nav?.notifButton?.id||'btn-notifs'));
 if (!nb) return;
 
@@ -510,7 +544,7 @@ function setState(){
   if (p === 'granted'){
     nb.classList.add('ok');
     nb.textContent = labels.ok || '✅ NOTIFICACIONES';
-    if (typeof obtenerToken === 'function') obtenerToken();
+    if (typeof obtenerTokenFCM === 'function') obtenerTokenFCM();
   } else if (p === 'denied'){
     nb.classList.remove('ok');
     nb.textContent = labels.denied || '🚫 NOTIFICACIONES';
@@ -530,7 +564,7 @@ nb.addEventListener('click', async (e)=>{
   }
   if (Notification.permission === 'granted'){
     setState();
-    if (typeof obtenerToken === 'function') obtenerToken();
+    if (typeof obtenerTokenFCM === 'function') obtenerTokenFCM();
     return;
   }
   nb.classList.add('loading');
@@ -538,7 +572,7 @@ nb.addEventListener('click', async (e)=>{
   try{
     const perm = await Notification.requestPermission();
     setState();
-    if (perm === 'granted' && typeof obtenerToken === 'function') obtenerToken();
+    if (perm === 'granted' && typeof obtenerTokenFCM === 'function') obtenerTokenFCM();
   } finally {
     nb.classList.remove('loading');
   }
