@@ -472,8 +472,14 @@ nb.style.display = isStandaloneNow ? '' : 'none';
     }
   }
 
+  const VAPID = (window.APP_CONFIG && window.APP_CONFIG.firebase && window.APP_CONFIG.firebase.vapidKey) || null;
+  if (!VAPID) {
+    console.warn('Falta firebase.vapidKey en config. No se solicitará token.');
+    return null;
+  }
+
   const opts = {
-    vapidKey: VAPID_KEY,
+    vapidKey: VAPID,
     serviceWorkerRegistration: window.fcmSW, // 👈 siempre el mismo
   };
 
@@ -510,7 +516,7 @@ function setState(){
   if (p === 'granted'){
     nb.classList.add('ok');
     nb.textContent = labels.ok || '✅ NOTIFICACIONES';
-    if (typeof obtenerToken === 'function') obtenerToken();
+    if (typeof obtenerTokenFCM === 'function') obtenerTokenFCM();
   } else if (p === 'denied'){
     nb.classList.remove('ok');
     nb.textContent = labels.denied || '🚫 NOTIFICACIONES';
@@ -530,7 +536,7 @@ nb.addEventListener('click', async (e)=>{
   }
   if (Notification.permission === 'granted'){
     setState();
-    if (typeof obtenerToken === 'function') obtenerToken();
+    if (typeof obtenerTokenFCM === 'function') obtenerTokenFCM();
     return;
   }
   nb.classList.add('loading');
@@ -538,7 +544,7 @@ nb.addEventListener('click', async (e)=>{
   try{
     const perm = await Notification.requestPermission();
     setState();
-    if (perm === 'granted' && typeof obtenerToken === 'function') obtenerToken();
+    if (perm === 'granted' && typeof obtenerTokenFCM === 'function') obtenerTokenFCM();
   } finally {
     nb.classList.remove('loading');
   }
