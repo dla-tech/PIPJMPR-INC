@@ -456,37 +456,26 @@ nb.style.display = isStandaloneNow ? '' : 'none';
     },{once:true});
   }
 
-  let getTokenInFlight = null;
+  async function obtenerTokenFCM(){
+  if (!('Notification' in window)) return null;
+  if (Notification.permission !== 'granted') return null;
 
-async function obtenerTokenFCM(){
-  if (getTokenInFlight) return getTokenInFlight; // 🔒 evita doble llamada
-  getTokenInFlight = (async () => {
-    if (!('Notification' in window)) return null;
-    if (Notification.permission !== 'granted') return null;
-
-    // Asegura un solo SW de FCM
-    if (!window.fcmSW) {
+  // Espera a que el SW de FCM esté registrado
+  if (!window.fcmSW) {
+    // Si aún no lo registraste, hazlo aquí o espera a que el registro async termine
+    try {
       const reg = await navigator.serviceWorker.register('./firebase-messaging-sw.js', { scope: './' });
       window.fcmSW = reg;
+    } catch (e) {
+      console.error('No se pudo registrar FCM SW:', e);
+      return null;
     }
+  }
 
-    const opts = { vapidKey: VAPID_KEY, serviceWorkerRegistration: window.fcmSW };
-    const token = await messaging.getToken(opts);
-
-    if (token) {
-      const prev = localStorage.getItem('fcm_token');
-      if (token !== prev) {
-        await guardarTokenFCM(token);
-        localStorage.setItem('fcm_token', token);
-      }
-    }
-
-    return token;
-  })();
-
-  try { return await getTokenInFlight; }
-  finally { getTokenInFlight = null; }
-}
+  const opts = {
+    vapidKey: VAPID_KEY,
+    serviceWorkerRegistration: window.fcmSW, // 👈 siempre el mismo
+  };
 
   const token = await messaging.getToken(opts);
   // Guarda solo si es nuevo
@@ -521,7 +510,7 @@ function setState(){
   if (p === 'granted'){
     nb.classList.add('ok');
     nb.textContent = labels.ok || '✅ NOTIFICACIONES';
-    if (typeof obtenerTokenFCM === 'function') obtenerTokenFCM();
+    if (typeof obtenerToken === 'function') obtenerToken();
   } else if (p === 'denied'){
     nb.classList.remove('ok');
     nb.textContent = labels.denied || '🚫 NOTIFICACIONES';
