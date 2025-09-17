@@ -455,61 +455,37 @@ nb.style.display = isStandaloneNow ? '' : 'none';
       navigator.serviceWorker.register(cfg.firebase.serviceWorkers?.fcm||'./firebase-messaging-sw.js',{scope:'./'}).then(reg=>{window.fcmSW=reg}).catch(()=>{});
     },{once:true});
   }
-  window.__fcmTokenPromise = null; // candado para evitar llamadas simultáneas
-async function obtenerToken(){
-  // ya tienes "messaging" arriba, lo reutilizamos
-  if (!messaging) return null;
-  if (!('Notification' in window)) return null;
-  if (Notification.permission !== 'granted') return null;
 
-  // si ya hay una solicitud en curso, reúsala (evita dobles tokens)
-  if (window.__fcmTokenPromise) return window.__fcmTokenPromise;
-
-  // asegúrate de usar SIEMPRE el SW de FCM (nunca alternes con appSW)
-  if (!window.fcmSW) {
-    try {
-      const swPath = (window.APP_CONFIG?.firebase?.serviceWorkers?.fcm) || './firebase-messaging-sw.js';
-      const reg = await navigator.serviceWorker.register(swPath, { scope: './' });
-      window.fcmSW = reg;
-    } catch (e) {
-      console.error('[FCM] No se pudo registrar SW FCM:', e);
-      return null;
-    }
+  async function guardarTokenFCM(token){
+    try{ if(!window.db) return; const ua=navigator.userAgent||''; const ts=new Date().toISOString();
+      await window.db.collection(cfg.firebase.firestore?.tokensCollection||'fcmTokens').doc(token).set({token,ua,ts},{merge:true});
+    }catch(e){ console.error('Error guardando token FCM:',e); }
   }
-
-  const vapid = window.APP_CONFIG?.firebase?.vapidPublicKey;  // ← conservamos TU clave del config
-  if (!vapid) { console.warn('[FCM] Falta firebase.vapidPublicKey en config.js'); return null; }
-
-  // una sola ejecución “en vuelo”
-  window.__fcmTokenPromise = (async () => {
-    const token = await messaging.getToken({
-      vapidKey: vapid,
-      serviceWorkerRegistration: window.fcmSW   // 👈 siempre el mismo SW
-    });
-
-    if (!token) return null;
-
-    // guarda solo si cambió (dedupe)
-    const prev = localStorage.getItem('fcm_token');
-    if (token !== prev) {
-      try {
-        if (window.APP_CONFIG?.firebase?.firestore?.enabled !== false && typeof guardarTokenFCM === 'function') {
-          await guardarTokenFCM(token);
-        }
-      } catch (e) {
-        console.error('[FCM] guardarTokenFCM falló:', e);
-      }
-      localStorage.setItem('fcm_token', token);
-    }
-    return token;
-  })();
-
-  try {
-    return await window.__fcmTokenPromise;
-  } finally {
-    // libera el candado al terminar
-    window.__fcmTokenPromise = null;
+  async function obtenerToken(){
+    if(!messaging) return null;
+    if(!('Notification' in window)) return null;
+    if(Notification.permission!=='granted') return null;
+    try{
+      const opts={ vapidKey: cfg.firebase.vapidPublicKey };
+      if(window.fcmSW) opts.serviceWorkerRegistration=window.fcmSW;
+      else if(window.appSW) opts.serviceWorkerRegistration=window.appSW;
+      const token=await messaging.getToken(opts);
+      if(token && cfg.firebase.firestore?.enabled!==false) await guardarTokenFCM(token);
+      return token;
+    }catch(e){ console.error('getToken FCM:',e); return null; }
   }
+const nb = $('#'+(cfg.nav?.notifButton?.id||'btn-notifs'));
+if (!nb) return;
+
+// ¿Está instalada (standalone)?
+const isStandalone =
+  (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
+  (window.navigator.standalone === true);
+
+if (!isStandalone) {
+  // En navegador normal: oculto
+  nb.style.display = 'none';
+  return;
 }
 
 // ✅ En PWA instalada: muéstralo explícitamente
