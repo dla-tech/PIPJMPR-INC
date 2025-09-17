@@ -456,20 +456,62 @@ nb.style.display = isStandaloneNow ? '' : 'none';
     },{once:true});
   }
 
-  async function obtenerTokenFCM(){
-  if (!('Notification' in window)) return null;
-  if (Notification.permission !== 'granted') return null;
+  async function guardarTokenFCM(token){
+  try {
+    if(!window.db) return;
+    const ua = navigator.userAgent || '';
+    const ts = new Date().toISOString();
+    await window.db.collection(cfg.firebase.firestore?.tokensCollection || 'fcmTokens')
+      .doc(token)
+      .set({ token, ua, ts }, { merge: true });
+  } catch(e){
+    console.error('Error guardando token FCM:', e);
+  }
+}
 
-  // Espera a que el SW de FCM esté registrado
-  if (!window.fcmSW) {
-    // Si aún no lo registraste, hazlo aquí o espera a que el registro async termine
-    try {
-      const reg = await navigator.serviceWorker.register('./firebase-messaging-sw.js', { scope: './' });
-      window.fcmSW = reg;
-    } catch (e) {
-      console.error('No se pudo registrar FCM SW:', e);
-      return null;
+async function obtenerTokenFCM(){
+  const isStandalone =
+    (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
+    (window.navigator.standalone === true);
+
+  // Solo generar token en PWA instalada
+  if (!isStandalone) {
+    console.log('⛔ No pido token (no es PWA instalada)');
+    return null;
+  }
+
+  if(!messaging) return null;
+  if(!('Notification' in window)) return null;
+  if(Notification.permission !== 'granted') return null;
+
+  try {
+    // Siempre usa el mismo SW (service-worker.js)
+    if (!window.appSW) {
+      const reg = await navigator.serviceWorker.register('./service-worker.js', { scope: './' });
+      window.appSW = window.fcmSW = reg;
     }
+
+    const opts = {
+      vapidKey: cfg.firebase.vapidPublicKey,
+      serviceWorkerRegistration: window.appSW
+    };
+
+    const token = await messaging.getToken(opts);
+
+    if (token && cfg.firebase.firestore?.enabled !== false) {
+      const prev = localStorage.getItem('fcm_token');
+      if (token !== prev) {
+        await guardarTokenFCM(token);
+        localStorage.setItem('fcm_token', token);
+      }
+    }
+
+    return token;
+  } catch(e){
+    console.error('getToken FCM:', e);
+    return null;
+  }
+}
   }
 
   const opts = {
