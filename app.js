@@ -816,3 +816,18 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
   window.addEventListener('hashchange', maybeShowFromHash);
   window.addEventListener('load',       maybeShowFromHash, { once:true });
 })();
+  // Soporte: cuando el SW pide "ve a tal hash", navega ahí
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('message', (ev) => {
+      const msg = ev.data || {};
+      if (msg.__cmd === 'go' && typeof msg.href === 'string') {
+        // Asegura que solo tocamos el hash (no recargamos)
+        const newHash = msg.href.includes('#')
+          ? msg.href.slice(msg.href.indexOf('#'))
+          : '#/';
+        if (newHash !== location.hash) {
+          location.hash = newHash;
+        }
+      }
+    });
+  }
