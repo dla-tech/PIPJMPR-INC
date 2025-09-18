@@ -1,6 +1,6 @@
 /* app.js */
 
-const $  = (s,r=document)=>r.querySelector(s);
+const $  = (s,p=document)=>r.querySelector(s);
 const el = (t,p={})=>Object.assign(document.createElement(t),p);
 const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
 
@@ -440,154 +440,59 @@ nb.style.display = isStandaloneNow ? '' : 'none';
   window.addEventListener('appinstalled',()=>{ btn.style.display='none'; });
 })();
 
-/* ───────── Firebase + notifs ───────── */  
+/* ───────── Firebase + notifs ───────── */
 (function(){
-  try {
-    if (!window.__CFG_ALLOWED) return;
-    const cfg = window.APP_CONFIG;
-    if (!cfg?.firebase?.app) return;                           // sin config -> no hacemos nada
-    if (!window.firebase) return;                              // libs no cargaron aún
+  if(!window.__CFG_ALLOWED) return;
+  const cfg=window.APP_CONFIG; if(!cfg.firebase?.app) return;
 
-    // Init Firebase
-    if (!firebase.apps?.length) firebase.initializeApp(cfg.firebase.app);
-    if (!window.db && firebase.firestore) window.db = firebase.firestore();
-    const messaging = firebase.messaging ? firebase.messaging() : null;
-    if (!messaging) return;
+  if(!window.firebase?.apps?.length) firebase.initializeApp(cfg.firebase.app);
+  if(!window.db && firebase.firestore) window.db=firebase.firestore();
+  const messaging = firebase.messaging ? firebase.messaging() : null;
 
-    // Registrar SWs sin romper si falla
-    if ('serviceWorker' in navigator) {
-      // SW de la PWA
-      navigator.serviceWorker
-        .register(cfg.firebase.serviceWorkers?.app || './service-worker.js', { scope: './' })
-        .then(reg => { window.appSW = reg; })
-        .catch(err => console.warn('SW app:', err));
+  if('serviceWorker' in navigator){
+    window.addEventListener('load', ()=>{
+      navigator.serviceWorker.register(cfg.firebase.serviceWorkers?.app||'./service-worker.js',{scope:'./'}).then(reg=>{window.appSW=reg}).catch(()=>{});
+      navigator.serviceWorker.register(cfg.firebase.serviceWorkers?.fcm||'./firebase-messaging-sw.js',{scope:'./'}).then(reg=>{window.fcmSW=reg}).catch(()=>{});
+    },{once:true});
+  }
 
-      // SW de FCM (el importante para tokens)
-      navigator.serviceWorker
-        .register(cfg.firebase.serviceWorkers?.fcm || './firebase-messaging-sw.js', { scope: './' })
-        .then(reg => { window.fcmSW = reg; })
-        .catch(err => console.warn('SW FCM:', err));
-    }
+  // Promesa única para esperar el SW de FCM
+  let __fcmRegPromise = null;
+  function waitForFcmSW() {
+    if (__fcmRegPromise) return __fcmRegPromise;
+    __fcmRegPromise = new Promise(async (resolve, reject) => {
+      try {
+        // Si ya está, resuelve de inmediato
+        if (window.fcmSW) return resolve(window.fcmSW);
 
-    // Esperar SIEMPRE el SW de FCM (una sola promesa)
-    let __fcmRegPromise = null;
-    function waitForFcmSW(){
-      if (__fcmRegPromise) return __fcmRegPromise;
-      __fcmRegPromise = new Promise((resolve, reject) => {
-        const start = Date.now();
-        (function poll(){
-          if (window.fcmSW) return resolve(window.fcmSW);
-          if (Date.now() - start > 2000) return reject(new Error('FCM SW no disponible'));
-          setTimeout(poll, 100);
-        })();
-      });
-      return __fcmRegPromise;
-    }
-
-    async function guardarTokenFCM(token){
-      try{
-        if (!window.db) return;
-        const ua = navigator.userAgent || '';
-        const ts = new Date().toISOString();
-        const col = cfg.firebase.firestore?.tokensCollection || 'fcmTokens';
-        await window.db.collection(col).doc(token).set({ token, ua, ts }, { merge:true });
-      }catch(e){ console.error('Error guardando token FCM:', e); }
-    }
-
-    // Evitar dobles peticiones de token
-    let __tokenPromise = null;
-    async function obtenerToken(){
-      if (__tokenPromise) return __tokenPromise;
-      if (!('Notification' in window)) return null;
-      if (Notification.permission !== 'granted') return null;
-
-      __tokenPromise = (async()=>{
-        const fcmReg = await waitForFcmSW().catch(()=>null);
-        const token = await messaging.getToken({
-          vapidKey: cfg.firebase.vapidPublicKey,
-          serviceWorkerRegistration: fcmReg || undefined
-        });
-        if (token && cfg.firebase.firestore?.enabled !== false) {
-          const prev = localStorage.getItem('fcm_token');
-          if (token !== prev) {
-            await guardarTokenFCM(token);
-            localStorage.setItem('fcm_token', token);
+        // Si no está, intenta registrarlo (por si el onload aún no corrió)
+        if ('serviceWorker' in navigator) {
+          try {
+            const reg = await navigator.serviceWorker.register(
+              (cfg.firebase.serviceWorkers?.fcm || './firebase-messaging-sw.js'),
+              { scope: './' }
+            );
+            window.fcmSW = reg;
+            return resolve(reg);
+          } catch (e) {
+            // Si falla, espera un poco a que el registro “oficial” lo pueble
           }
         }
-        return token || null;
-      })().finally(()=>{ __tokenPromise = null; });
 
-      return __tokenPromise;
-    }
-
-    // Botón NOTIFICACIONES (solo en PWA instalada)
-    const nb = document.getElementById(cfg.nav?.notifButton?.id || 'btn-notifs');
-    if (!nb) return;
-
-    const isStandalone =
-      (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
-      (window.navigator.standalone === true);
-
-    if (!isStandalone) { nb.style.display = 'none'; return; }
-    nb.style.display = '';
-    nb.style.pointerEvents = 'auto';
-
-    async function setState(){
-      const labels = cfg.nav?.notifButton?.labels || {};
-      const p = (typeof Notification !== 'undefined') ? Notification.permission : 'default';
-      if (p === 'granted'){
-        const prev = localStorage.getItem('fcm_token') || await obtenerToken();
-        if (prev) {
-          nb.classList.add('ok');
-          nb.textContent = labels.ok || '✅ NOTIFICACIONES';
-        } else {
-          nb.classList.remove('ok');
-          nb.textContent = labels.noToken || '⚠️ ACTIVAR NOTIFICACIONES';
-        }
-      } else if (p === 'denied'){
-        nb.classList.remove('ok');
-        nb.textContent = labels.denied || '🚫 NOTIFICACIONES';
-      } else {
-        nb.classList.remove('ok');
-        nb.textContent = labels.default || 'NOTIFICACIONES';
-      }
-    }
-
-    setState();
-
-    nb.addEventListener('click', async (e)=>{
-      e.preventDefault();
-      if (typeof Notification === 'undefined'){
-        alert('Este dispositivo no soporta notificaciones.');
-        return;
-      }
-      nb.classList.add('loading');
-      nb.textContent = '⏳ NOTIFICACIONES';
-      try{
-        if (Notification.permission !== 'granted'){
-          const perm = await Notification.requestPermission();
-          if (perm !== 'granted') return;
-        }
-        await obtenerToken();
-        await setState();
-      } finally {
-        nb.classList.remove('loading');
+        // Poll corto (hasta ~1.5s) por si el registro llega por el listener de load
+        const started = Date.now();
+        const tick = () => {
+          if (window.fcmSW) return resolve(window.fcmSW);
+          if (Date.now() - started > 1500) return reject(new Error('FCM SW no disponible'));
+          setTimeout(tick, 100);
+        };
+        tick();
+      } catch (err) {
+        reject(err);
       }
     });
-
-    // Actualizar visibilidad si cambia el modo
-    if (window.matchMedia) {
-      const mq = window.matchMedia('(display-mode: standalone)');
-      mq.addEventListener?.('change', () => {
-        const st = mq.matches || (window.navigator.standalone === true);
-        nb.style.display = st ? '' : 'none';
-      });
-    }
-  } catch(err){
-    // Pase lo que pase, no rompemos la app/loader
-    console.error('Bloque Firebase+notifs falló:', err);
+    return __fcmRegPromise;
   }
-})();
 
   // Promesa única de token (evita dobles)
   let __fcmTokenPromise = null;
