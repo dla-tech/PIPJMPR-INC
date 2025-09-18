@@ -427,16 +427,6 @@ nb.style.display = isStandaloneNow ? '' : 'none';
   if(!window.__CFG_ALLOWED) return;
   const cfg = window.APP_CONFIG;
   const btn = $('#'+(cfg.pwa?.install?.buttonId||'btn-install')); if(!btn) return;
-  // Si es iOS, el botón redirige a la raíz de la app para habilitar “Agregar a inicio”
-  const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
-  if (isIOS && btn) {
-    btn.style.display = '';
-    btn.addEventListener('click', e => {
-      e.preventDefault();
-      window.location.href = location.origin + location.pathname;
-    });
-    return;
-  }
   const isStandalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || (window.navigator.standalone===true);
   if(isStandalone){ btn.style.display='none'; return; }
   let deferredPrompt=null;
