@@ -542,6 +542,18 @@ nb.style.display = isStandaloneNow ? '' : 'none';
 
     return __fcmTokenPromise;
   }
+
+  // Comprueba si ya hay token válido; si no, intenta obtenerlo
+  async function hasValidToken(){
+    try{
+      const prev = localStorage.getItem('fcm_token');
+      if (prev && typeof prev === 'string' && prev.length > 10) return prev;
+      const t = await obtenerToken();
+      return t || null;
+    }catch(_){
+      return null;
+    }
+  }
 const nb = $('#'+(cfg.nav?.notifButton?.id||'btn-notifs'));
 if (!nb) return;
 
@@ -560,13 +572,18 @@ if (!isStandalone) {
 nb.style.display = '';
 nb.style.pointerEvents = 'auto'; // opcional
 
-function setState(){
+async function setState(){
   const labels = cfg.nav?.notifButton?.labels || {};
   const p = (typeof Notification !== 'undefined') ? Notification.permission : 'default';
   if (p === 'granted'){
-    nb.classList.add('ok');
-    nb.textContent = labels.ok || '✅ NOTIFICACIONES';
-    if (typeof obtenerToken === 'function') obtenerToken();
+    const tok = await hasValidToken();
+    if (tok){
+      nb.classList.add('ok');
+      nb.textContent = labels.ok || '✅ NOTIFICACIONES';
+    } else {
+      nb.classList.remove('ok');
+      nb.textContent = labels.noToken || '⚠️ ACTIVAR NOTIFICACIONES';
+    }
   } else if (p === 'denied'){
     nb.classList.remove('ok');
     nb.textContent = labels.denied || '🚫 NOTIFICACIONES';
@@ -585,16 +602,24 @@ nb.addEventListener('click', async (e)=>{
     return;
   }
   if (Notification.permission === 'granted'){
-    setState();
-    if (typeof obtenerToken === 'function') obtenerToken();
+    nb.classList.add('loading');
+    nb.textContent = '⏳ NOTIFICACIONES';
+    try{
+      await obtenerToken();
+      await setState();
+    } finally {
+      nb.classList.remove('loading');
+    }
     return;
   }
   nb.classList.add('loading');
   nb.textContent = '⏳ NOTIFICACIONES';
   try{
     const perm = await Notification.requestPermission();
-    setState();
-    if (perm === 'granted' && typeof obtenerToken === 'function') obtenerToken();
+    if (perm === 'granted'){
+      await obtenerToken();
+    }
+    await setState();
   } finally {
     nb.classList.remove('loading');
   }
