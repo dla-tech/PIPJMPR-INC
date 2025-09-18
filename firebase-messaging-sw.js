@@ -9,7 +9,7 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim());
 });
 
-// Configuración de tu proyecto
+// Config de tu proyecto
 firebase.initializeApp({
   apiKey: "AIzaSyAHQjMp8y9uaxAd0nnmCcVaXWSbij3cvEo",
   authDomain: "miappiglesia-c703a.firebaseapp.com",
@@ -21,12 +21,40 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
-// Estrategia A: dejar que el navegador maneje notification payloads.
-// No hacemos showNotification, así NO hay duplicados.
+// Iconos por defecto Android
+const DEFAULT_ICON  = "icons/icon-192.png";
+const DEFAULT_BADGE = "icons/icon-72.png";
+
+// Mensajes en background
 messaging.onBackgroundMessage((payload) => {
-  console.log('[FM A] Mensaje en background:', payload);
-  if (payload?.notification) {
-    // navegador se encarga de mostrarla
-    return;
-  }
+  // Si viene "notification", deja que el navegador la maneje (evita duplicados)
+  if (payload?.notification) return;
+
+  // Si viene como data message (tus atajos), mándala nosotros
+  const d = payload?.data || {};
+  const title = d.title || 'Notificación';
+  const options = {
+    body: d.body || '',
+    icon: d.icon || DEFAULT_ICON,
+    badge: d.badge || DEFAULT_BADGE,
+    image: d.image || undefined,
+    data: {
+      url: d.url || '/',
+    }
+  };
+  self.registration.showNotification(title, options);
+});
+
+// Click en la notificación
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const targetUrl = event.notification.data?.url || '/';
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      for (const client of list) {
+        if ('focus' in client) return client.focus();
+      }
+      if (self.clients.openWindow) return self.clients.openWindow(targetUrl);
+    })
+  );
 });
