@@ -441,58 +441,214 @@ nb.style.display = isStandaloneNow ? '' : 'none';
 })();
 
 /* ───────── Firebase + notifs ───────── */
+/* ───────── Hoja de notificación (lee hash y muestra texto + vista previa del día) ───────── */
 (function(){
   if(!window.__CFG_ALLOWED) return;
-  const cfg=window.APP_CONFIG; if(!cfg.firebase?.app) return;
+  const cfg = window.APP_CONFIG || {};
+  const ICS_URL = cfg.ics?.url || null;   // se usa solo para la vista previa del día
 
-  if(!window.firebase?.apps?.length) firebase.initializeApp(cfg.firebase.app);
-  if(!window.db && firebase.firestore) window.db=firebase.firestore();
-  const messaging = firebase.messaging ? firebase.messaging() : null;
-
-  if('serviceWorker' in navigator){
-    window.addEventListener('load', ()=>{
-      navigator.serviceWorker.register(cfg.firebase.serviceWorkers?.app||'./service-worker.js',{scope:'./'}).then(reg=>{window.appSW=reg}).catch(()=>{});
-      navigator.serviceWorker.register(cfg.firebase.serviceWorkers?.fcm||'./firebase-messaging-sw.js',{scope:'./'}).then(reg=>{window.fcmSW=reg}).catch(()=>{});
-    },{once:true});
+  // === helpers hash ===
+  function parseHash(){
+    const h = (location.hash||'').replace(/^#/, '');
+    const p = new URLSearchParams(h);
+    return Object.fromEntries(p.entries());
+  }
+  function clearHash(){
+    try {
+      history.replaceState(null, '', location.pathname + location.search); // limpia sin recargar
+    } catch {
+      location.hash = '';
+    }
   }
 
-  // Promesa única para esperar el SW de FCM
-  let __fcmRegPromise = null;
-  function waitForFcmSW() {
-    if (__fcmRegPromise) return __fcmRegPromise;
-    __fcmRegPromise = new Promise(async (resolve, reject) => {
-      try {
-        // Si ya está, resuelve de inmediato
-        if (window.fcmSW) return resolve(window.fcmSW);
+  // === estilos inyectados (solo para la hoja) ===
+  (function injectStyles(){
+    if (document.getElementById('notif-sheet-style')) return;
+    const css = `
+    .notif-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:flex-end;justify-content:center;z-index:100000}
+    .notif-sheet{width:min(900px,96vw);max-height:86vh;background:#fff;border-radius:16px 16px 0 0;box-shadow:0 15px 50px rgba(0,0,0,.35);overflow:auto}
+    .notif-head{padding:14px 16px;border-bottom:1px solid #e5e7eb}
+    .notif-title{margin:0;font:800 18px/1.25 system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial}
+    .notif-body{padding:14px 16px;color:#0b1421;white-space:pre-wrap}
+    .notif-day{padding:0 16px 16px}
+    .notif-day h4{margin:8px 0 8px;font:700 14px/1.25 system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial;color:#0b1421}
+    .notif-events{list-style:none;margin:0;padding:0;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden}
+    .notif-events li{padding:10px 12px;border-top:1px solid #f1f5f9}
+    .notif-events li:first-child{border-top:0}
+    .notif-empty{padding:12px;color:#475569;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:10px}
+    .notif-close{display:block;width:100%;padding:14px 16px;margin:10px 0 12px;background:#b91c1c;color:#fff;font-weight:800;border:0;border-radius:10px}
+    @media (min-width:720px){.notif-sheet{border-radius:16px; margin-bottom:4vh}}
+    `;
+    const st = document.createElement('style');
+    st.id = 'notif-sheet-style';
+    st.textContent = css;
+    document.head.appendChild(st);
+  })();
 
-        // Si no está, intenta registrarlo (por si el onload aún no corrió)
-        if ('serviceWorker' in navigator) {
-          try {
-            const reg = await navigator.serviceWorker.register(
-              (cfg.firebase.serviceWorkers?.fcm || './firebase-messaging-sw.js'),
-              { scope: './' }
-            );
-            window.fcmSW = reg;
-            return resolve(reg);
-          } catch (e) {
-            // Si falla, espera un poco a que el registro “oficial” lo pueble
-          }
-        }
+  // === construir hoja ===
+  function buildSheet({title, body, date}){
+    const back = document.createElement('div');
+    back.className = 'notif-backdrop';
+    back.setAttribute('role','dialog');
+    back.setAttribute('aria-modal','true');
 
-        // Poll corto (hasta ~1.5s) por si el registro llega por el listener de load
-        const started = Date.now();
-        const tick = () => {
-          if (window.fcmSW) return resolve(window.fcmSW);
-          if (Date.now() - started > 1500) return reject(new Error('FCM SW no disponible'));
-          setTimeout(tick, 100);
-        };
-        tick();
-      } catch (err) {
-        reject(err);
-      }
+    const sheet = document.createElement('div');
+    sheet.className = 'notif-sheet';
+
+    const head = document.createElement('div');
+    head.className = 'notif-head';
+
+    const h = document.createElement('h3');
+    h.className = 'notif-title';
+    h.textContent = title || 'Notificación';
+    head.appendChild(h);
+
+    const main = document.createElement('div');
+    main.className = 'notif-body';
+    main.textContent = body || '';
+
+    const dayWrap = document.createElement('div');
+    dayWrap.className = 'notif-day';
+
+    // botón cerrar
+    const close = document.createElement('button');
+    close.className = 'notif-close';
+    close.textContent = 'Cerrar';
+    close.addEventListener('click', () => {
+      try { document.body.removeChild(back); } catch {}
+      clearHash();
     });
-    return __fcmRegPromise;
+
+    sheet.append(head, main);
+
+    if (date) {
+      const titleDay = document.createElement('h4');
+      const [Y,M,D] = date.split('-');
+      titleDay.textContent = `Actividades del ${D}/${M}/${Y}`;
+      dayWrap.appendChild(titleDay);
+
+      const holder = document.createElement('div');
+      holder.innerHTML = `<div class="notif-empty">Cargando vista del día...</div>`;
+      dayWrap.appendChild(holder);
+
+      // cargar vista previa desde ICS (si está configurado)
+      if (ICS_URL){
+        renderDayFromICS(ICS_URL, date, holder).catch(()=>{
+          holder.innerHTML = `<div class="notif-empty">No se pudo cargar el calendario.</div>`;
+        });
+      } else {
+        holder.innerHTML = `<div class="notif-empty">No hay calendario configurado.</div>`;
+      }
+
+      sheet.appendChild(dayWrap);
+    }
+
+    sheet.appendChild(close);
+    back.appendChild(sheet);
+
+    // cerrar al tocar el fondo (no dentro de la hoja)
+    back.addEventListener('click', (e)=>{ if (e.target === back) close.click(); });
+
+    return back;
   }
+
+  // === ICS day preview (mini-agenda) ===
+  async function renderDayFromICS(url, ymd, mountEl){
+    const res = await fetch(url + '?t=' + Date.now(), { cache: 'no-store' });
+    if (!res.ok) throw new Error('ICS HTTP ' + res.status);
+    const text = (await res.text()).replace(/(?:\r\n|\n)[ \t]/g,''); // unfold
+
+    const vevents = text.split(/BEGIN:VEVENT/).slice(1).map(b=>'BEGIN:VEVENT'+b.split('END:VEVENT')[0]);
+
+    // parse DTSTART
+    function parseDTSTART(block){
+      const m = block.match(/^DTSTART([^:\n]*)?:([^\n]+)$/mi);
+      if (!m) return null;
+      const params=(m[1]||'').toUpperCase(); const val=m[2].trim();
+      const dOnly=val.match(/^(\d{4})(\d{2})(\d{2})$/);
+      if (/VALUE=DATE/.test(params) && dOnly){
+        const [_,Y,M,D] = dOnly; return new Date(Date.UTC(+Y,+M-1,+D,4,0,0)); // PR ~ 00:00
+      }
+      const dt=val.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z)?$/);
+      if (dt){
+        const [_,Y,M,D,hh,mm,ss,Z] = dt;
+        if (/TZID=AMERICA\/PUERTO_RICO/.test(params)) return new Date(Date.UTC(+Y,+M-1,+D,+hh+4,+mm,+ss));
+        if (Z) return new Date(Date.UTC(+Y,+M-1,+D,+hh,+mm,+ss));
+        return new Date(Date.UTC(+Y,+M-1,+D,+hh+4,+mm,+ss));
+      }
+      if (dOnly){ const [_,Y,M,D] = dOnly; return new Date(Date.UTC(+Y,+M-1,+D,4,0,0)); }
+      return null;
+    }
+    const getLineVal = (block, prop) => {
+      const m = block.match(new RegExp('^'+prop+'(?:;[^:\\n]*)?:(.*)$','mi'));
+      return m ? m[1].trim() : null;
+    };
+
+    // rango del día en PR
+    const [Y,M,D] = ymd.split('-').map(Number);
+    const start = new Date(Date.UTC(Y, M-1, D, 4, 0, 0));     // ~00:00 PR
+    const end   = new Date(Date.UTC(Y, M-1, D+1, 4, 0, 0));   // ~00:00 PR siguiente
+
+    function inDayPR(dt){
+      return dt && dt >= start && dt < end;
+    }
+
+    const items = [];
+    for (const ev of vevents){
+      const dt = parseDTSTART(ev);
+      if (!inDayPR(dt)) continue;
+      const summary  = getLineVal(ev, 'SUMMARY')  || 'Actividad';
+      const location = getLineVal(ev, 'LOCATION') || '';
+      items.push({ dt, summary, location });
+    }
+    items.sort((a,b)=>a.dt-b.dt);
+
+    // render
+    if (!items.length){
+      mountEl.innerHTML = `<div class="notif-empty">No hay actividades registradas para este día.</div>`;
+      return;
+    }
+    const ul = document.createElement('ul');
+    ul.className = 'notif-events';
+    mountEl.innerHTML = '';
+    for (const it of items){
+      const time = new Date(it.dt).toLocaleTimeString('es-PR', { hour: '2-digit', minute: '2-digit' });
+      const li = document.createElement('li');
+      li.innerHTML = `<strong>${time}</strong> — ${escapeHtml(it.summary)}${it.location ? ` <br><span style="opacity:.8">${escapeHtml(it.location)}</span>` : ''}`;
+      ul.appendChild(li);
+    }
+    mountEl.appendChild(ul);
+  }
+
+  function escapeHtml(s){
+    return String(s||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
+  }
+
+  // === controlador: abre/cierra según hash ===
+  let openRef = null; // nodo actual
+  async function tryOpenFromHash(){
+    const p = parseHash();
+    if (p.notif !== '1') { // cerrar si estaba abierta
+      if (openRef) {
+        try { document.body.removeChild(openRef); } catch {}
+        openRef = null;
+      }
+      return;
+    }
+    // construir y montar
+    const title = p.title ? decodeURIComponent(p.title) : 'Notificación';
+    const body  = p.body  ? decodeURIComponent(p.body)  : '';
+    const date  = p.date  ? decodeURIComponent(p.date)  : '';
+
+    if (openRef) { try { document.body.removeChild(openRef); } catch {} }
+    openRef = buildSheet({ title, body, date });
+    document.body.appendChild(openRef);
+  }
+
+  window.addEventListener('hashchange', tryOpenFromHash, { passive:true });
+  // en carga inicial (por si viene desde la notificación)
+  tryOpenFromHash();
+})();
 
   // Promesa única de token (evita dobles)
   let __fcmTokenPromise = null;
