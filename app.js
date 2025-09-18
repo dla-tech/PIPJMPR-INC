@@ -456,23 +456,91 @@ nb.style.display = isStandaloneNow ? '' : 'none';
     },{once:true});
   }
 
+  // Promesa única para esperar el SW de FCM
+  let __fcmRegPromise = null;
+  function waitForFcmSW() {
+    if (__fcmRegPromise) return __fcmRegPromise;
+    __fcmRegPromise = new Promise(async (resolve, reject) => {
+      try {
+        // Si ya está, resuelve de inmediato
+        if (window.fcmSW) return resolve(window.fcmSW);
+
+        // Si no está, intenta registrarlo (por si el onload aún no corrió)
+        if ('serviceWorker' in navigator) {
+          try {
+            const reg = await navigator.serviceWorker.register(
+              (cfg.firebase.serviceWorkers?.fcm || './firebase-messaging-sw.js'),
+              { scope: './' }
+            );
+            window.fcmSW = reg;
+            return resolve(reg);
+          } catch (e) {
+            // Si falla, espera un poco a que el registro “oficial” lo pueble
+          }
+        }
+
+        // Poll corto (hasta ~1.5s) por si el registro llega por el listener de load
+        const started = Date.now();
+        const tick = () => {
+          if (window.fcmSW) return resolve(window.fcmSW);
+          if (Date.now() - started > 1500) return reject(new Error('FCM SW no disponible'));
+          setTimeout(tick, 100);
+        };
+        tick();
+      } catch (err) {
+        reject(err);
+      }
+    });
+    return __fcmRegPromise;
+  }
+
+  // Promesa única de token (evita dobles)
+  let __fcmTokenPromise = null;
+
   async function guardarTokenFCM(token){
     try{ if(!window.db) return; const ua=navigator.userAgent||''; const ts=new Date().toISOString();
       await window.db.collection(cfg.firebase.firestore?.tokensCollection||'fcmTokens').doc(token).set({token,ua,ts},{merge:true});
     }catch(e){ console.error('Error guardando token FCM:',e); }
   }
   async function obtenerToken(){
-    if(!messaging) return null;
-    if(!('Notification' in window)) return null;
-    if(Notification.permission!=='granted') return null;
-    try{
-      const opts={ vapidKey: cfg.firebase.vapidPublicKey };
-      if(window.fcmSW) opts.serviceWorkerRegistration=window.fcmSW;
-      else if(window.appSW) opts.serviceWorkerRegistration=window.appSW;
-      const token=await messaging.getToken(opts);
-      if(token && cfg.firebase.firestore?.enabled!==false) await guardarTokenFCM(token);
-      return token;
-    }catch(e){ console.error('getToken FCM:',e); return null; }
+    if (!messaging) return null;
+    if (!('Notification' in window)) return null;
+    if (Notification.permission !== 'granted') return null;
+
+    // Si ya hay una petición en curso, reutilízala
+    if (__fcmTokenPromise) return __fcmTokenPromise;
+
+    __fcmTokenPromise = (async () => {
+      try {
+        // 1) Espera SIEMPRE el SW de FCM (no usar appSW como fallback)
+        const fcmReg = await waitForFcmSW();
+
+        // 2) Pide el token siempre contra ese registration
+        const opts = {
+          vapidKey: cfg.firebase.vapidPublicKey,
+          serviceWorkerRegistration: fcmReg
+        };
+        const token = await messaging.getToken(opts);
+
+        // 3) Guarda solo si cambia (opcional)
+        if (token && cfg.firebase.firestore?.enabled !== false) {
+          const prev = localStorage.getItem('fcm_token');
+          if (token !== prev) {
+            await guardarTokenFCM(token);
+            localStorage.setItem('fcm_token', token);
+          }
+        }
+        return token || null;
+      } catch (e) {
+        console.error('getToken FCM:', e);
+        return null;
+      } finally {
+        // Permite nuevas peticiones solo después de resolver/rechazar
+        __fcmTokenPromise = null;
+      }
+    })();
+
+    return __fcmTokenPromise;
   }
 const nb = $('#'+(cfg.nav?.notifButton?.id||'btn-notifs'));
 if (!nb) return;
