@@ -1,15 +1,9 @@
-/* eslint-disable no-undef */
-// === Service Worker para Firebase Cloud Messaging (FCM) ===
+/* firebase-messaging-sw.js */
+// Service Worker para Firebase Messaging
+
 importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js');
 
-// Forzar que el SW nuevo tome control rápido
-self.addEventListener('install', () => self.skipWaiting());
-self.addEventListener('activate', (event) => {
-  event.waitUntil(self.clients.claim());
-});
-
-// Config de tu proyecto
 firebase.initializeApp({
   apiKey: "AIzaSyAHQjMp8y9uaxAd0nnmCcVaXWSbij3cvEo",
   authDomain: "miappiglesia-c703a.firebaseapp.com",
@@ -21,43 +15,38 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
-// Iconos por defecto Android
-const DEFAULT_ICON  = "icons/icon-192.png";
-const DEFAULT_BADGE = "icons/icon-72.png";
-
-// Mensajes en background
+// === Notificaciones en background ===
 messaging.onBackgroundMessage((payload) => {
-  // Si viene "notification", deja que el navegador la maneje (evita duplicados)
-  if (payload?.notification) return;
+  console.log('[FM] BG message:', payload);
+  const n = payload.notification || {};
+  const d = payload.data || {};
 
-  // Si viene como data message (tus atajos), mándala nosotros
-  const d = payload?.data || {};
-  const title = d.title || 'Notificación';
+  const title = n.title || d.title || 'Notificación';
+  const body  = n.body  || d.body  || '';
+  const url   = d.url || `/#/notif?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`;
+
   const options = {
-    body: d.body || '',
-    icon: d.icon || DEFAULT_ICON,
-    badge: d.badge || DEFAULT_BADGE,
+    body,
+    icon: d.icon || "icons/icon-192.png",
+    badge: d.badge || "icons/icon-72.png",
     image: d.image || undefined,
-    data: {
-      title: d.title,
-      body: d.body,
-      date: d.date,
-      image: d.image,
-      link: d.link,
-      url: d.url || (`/#/notif?title=${encodeURIComponent(d.title||'')}&body=${encodeURIComponent(d.body||'')}&date=${encodeURIComponent(d.date||'')}&image=${encodeURIComponent(d.image||'')}&link=${encodeURIComponent(d.link||'')}`)
-    }
+    data: { url }
   };
+
   self.registration.showNotification(title, options);
 });
 
-// Click en la notificación
+// === Click: abre la app con hash ===
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const targetUrl = event.notification.data?.url || '/';
   event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
       for (const client of list) {
-        if ('focus' in client) return client.focus();
+        if ('focus' in client) {
+          client.navigate(targetUrl);
+          return client.focus();
+        }
       }
       if (self.clients.openWindow) return self.clients.openWindow(targetUrl);
     })
