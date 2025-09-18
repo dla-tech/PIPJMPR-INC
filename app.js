@@ -728,9 +728,11 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
 
   function normalizePayload(p){
     const dYmd = toEmbedDate(p.date);
+    const title = String(p.title || 'Notificación').replace(/\+/g, ' ').trim().slice(0, 140);
+    const body  = String(p.body  || '').replace(/\+/g, ' ').trim();
     return {
-      title: String(p.title||'Notificación').slice(0,140),
-      body:  String(p.body||''),
+      title,
+      body,
       image: p.image || '',
       link:  p.link || '',
       ymd:   dYmd
@@ -760,9 +762,18 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
     return ov;
   }
 
+  function escapeHtml(s){
+    return String(s)
+      .replace(/&/g,'&amp;')
+      .replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;');
+  }
+
   function renderNotifView(payload){
     const ov = ensureOverlay();
     const card = document.getElementById('notif-card');
+    const safeTitle = escapeHtml(payload.title);
+    const safeBody  = escapeHtml(payload.body);
     const closeBtn = `
       <button id="notif-close" style="
         display:block;width:100%;margin:12px 0 0;padding:12px;
@@ -791,8 +802,8 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
     }
 
     card.innerHTML = `
-      <h3 style="margin:4px 2px 8px;font:800 18px/1.25 system-ui,-apple-system,Segoe UI,Roboto,Arial">${payload.title}</h3>
-      <div style="font:400 15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Arial;white-space:pre-wrap">${payload.body}</div>
+      <h3 style="margin:4px 2px 8px;font:800 18px/1.25 system-ui,-apple-system,Segoe UI,Roboto,Arial">${safeTitle}</h3>
+      <div style="font:400 15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Arial;white-space:pre-wrap">${safeBody}</div>
       ${img}
       ${link}
       ${calendar}
