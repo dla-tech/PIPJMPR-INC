@@ -1,6 +1,6 @@
 /* app.js */
 
-const $  = (s,p=document)=>r.querySelector(s);
+const $  = (s,r=document)=>r.querySelector(s);
 const el = (t,p={})=>Object.assign(document.createElement(t),p);
 const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
 
@@ -80,15 +80,16 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
 
   // notif + install
   const nb = el('a',{
-  id: cfg.nav?.notifButton?.id || 'btn-notifs',
-  className: 'navlink',
-  href: '#',
-  textContent: cfg.nav?.notifButton?.labels?.default || 'NOTIFICACIONES'
-});
-const isStandaloneNow =
-  (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
-  (window.navigator.standalone === true);
-nb.style.display = isStandaloneNow ? '' : 'none';
+    id: cfg.nav?.notifButton?.id || 'btn-notifs',
+    className: 'navlink',
+    href: '#',
+    textContent: cfg.nav?.notifButton?.labels?.default || 'NOTIFICACIONES'
+  });
+  const isStandaloneNow =
+    (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
+    (window.navigator.standalone === true);
+  nb.style.display = isStandaloneNow ? '' : 'none';
+
   const ibCfg = cfg.nav?.installButton;
   const ib = el('a',{id:ibCfg?.id||'btn-install',className:'navlink',href:'#',textContent:ibCfg?.label||'Descargar Web'});
   ib.style.background = ibCfg?.styles?.bg || '#7c3aed';
@@ -427,17 +428,62 @@ nb.style.display = isStandaloneNow ? '' : 'none';
   if(!window.__CFG_ALLOWED) return;
   const cfg = window.APP_CONFIG;
   const btn = $('#'+(cfg.pwa?.install?.buttonId||'btn-install')); if(!btn) return;
+
+  // Mostrar SOLO en navegador (no en PWA instalada)
   const isStandalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || (window.navigator.standalone===true);
   if(isStandalone){ btn.style.display='none'; return; }
+
+  // Detectamos plataforma
+  const isAndroid = /Android/i.test(navigator.userAgent);
+  const isIOS     = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+  // Mantén soporte para Android (beforeinstallprompt) sin refrescar la página
   let deferredPrompt=null;
-  window.addEventListener('beforeinstallprompt',(e)=>{ e.preventDefault(); deferredPrompt=e; btn.style.display=''; btn.disabled=false; });
+  window.addEventListener('beforeinstallprompt', (e)=>{
+    e.preventDefault();
+    deferredPrompt = e;
+    btn.style.display = '';
+    btn.disabled = false;
+  });
+
+  // Click del botón: en Android usa el prompt nativo; en iOS/otros usa Web Share si existe; si no, muestra instrucciones
   btn.addEventListener('click', async (ev)=>{
     ev.preventDefault();
-    if(!deferredPrompt){ alert(cfg.pwa?.install?.fallbackTutorial || 'Busca "Agregar a Inicio" en el menú.'); return; }
-    deferredPrompt.prompt(); try{ await deferredPrompt.userChoice; }catch(_){}
-    deferredPrompt=null;
+
+    // ANDROID: usa el prompt nativo cuando está disponible
+    if (isAndroid && deferredPrompt){
+      try{
+        deferredPrompt.prompt();
+        await deferredPrompt.userChoice; // accepted | dismissed
+      }catch(_){}
+      deferredPrompt = null; // el evento se usa una sola vez
+      return; // no refrescar
+    }
+
+    // iOS / Navegadores con Web Share API: abre la hoja de compartir sin refrescar
+    if (navigator.share){
+      try{
+        await navigator.share({
+          title: document.title || (cfg.meta?.appName || 'Mi App'),
+          text: cfg.pwa?.install?.shareText || 'Instala la app en tu pantalla de inicio',
+          url: location.href
+        });
+      }catch(_){/* usuario canceló o no hay share */}
+      return; // no refrescar
+    }
+
+    // Fallback universal: guía sin cambiar location
+    alert(
+      cfg.pwa?.install?.fallbackTutorial ||
+      (isIOS
+        ? 'En iPhone/iPad: Toca el botón Compartir y luego "Agregar a Inicio".'
+        : 'En tu navegador: abre el menú y elige "Agregar a la pantalla de inicio".'
+      )
+    );
   });
-  window.addEventListener('appinstalled',()=>{ btn.style.display='none'; });
+
+  // Si se instala (Android), ocultar el botón
+  window.addEventListener('appinstalled', ()=>{ btn.style.display='none'; });
 })();
 
 /* ───────── Firebase + notifs ───────── */
@@ -554,85 +600,86 @@ nb.style.display = isStandaloneNow ? '' : 'none';
       return null;
     }
   }
-const nb = $('#'+(cfg.nav?.notifButton?.id||'btn-notifs'));
-if (!nb) return;
 
-// ¿Está instalada (standalone)?
-const isStandalone =
-  (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
-  (window.navigator.standalone === true);
+  const nb = $('#'+(cfg.nav?.notifButton?.id||'btn-notifs'));
+  if (!nb) return;
 
-if (!isStandalone) {
-  // En navegador normal: oculto
-  nb.style.display = 'none';
-  return;
-}
+  // ¿Está instalada (standalone)?
+  const isStandalone =
+    (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
+    (window.navigator.standalone === true);
 
-// ✅ En PWA instalada: muéstralo explícitamente
-nb.style.display = '';
-nb.style.pointerEvents = 'auto'; // opcional
-
-async function setState(){
-  const labels = cfg.nav?.notifButton?.labels || {};
-  const p = (typeof Notification !== 'undefined') ? Notification.permission : 'default';
-  if (p === 'granted'){
-    const tok = await hasValidToken();
-    if (tok){
-      nb.classList.add('ok');
-      nb.textContent = labels.ok || '✅ NOTIFICACIONES';
-    } else {
-      nb.classList.remove('ok');
-      nb.textContent = labels.noToken || '⚠️ ACTIVAR NOTIFICACIONES';
-    }
-  } else if (p === 'denied'){
-    nb.classList.remove('ok');
-    nb.textContent = labels.denied || '🚫 NOTIFICACIONES';
-  } else {
-    nb.classList.remove('ok');
-    nb.textContent = labels.default || 'NOTIFICACIONES';
-  }
-}
-
-setState();
-
-nb.addEventListener('click', async (e)=>{
-  e.preventDefault();
-  if (typeof Notification === 'undefined'){
-    alert('Este dispositivo no soporta notificaciones.');
+  if (!isStandalone) {
+    // En navegador normal: oculto
+    nb.style.display = 'none';
     return;
   }
-  if (Notification.permission === 'granted'){
+
+  // ✅ En PWA instalada: muéstralo explícitamente
+  nb.style.display = '';
+  nb.style.pointerEvents = 'auto'; // opcional
+
+  async function setState(){
+    const labels = cfg.nav?.notifButton?.labels || {};
+    const p = (typeof Notification !== 'undefined') ? Notification.permission : 'default';
+    if (p === 'granted'){
+      const tok = await hasValidToken();
+      if (tok){
+        nb.classList.add('ok');
+        nb.textContent = labels.ok || '✅ NOTIFICACIONES';
+      } else {
+        nb.classList.remove('ok');
+        nb.textContent = labels.noToken || '⚠️ ACTIVAR NOTIFICACIONES';
+      }
+    } else if (p === 'denied'){
+      nb.classList.remove('ok');
+      nb.textContent = labels.denied || '🚫 NOTIFICACIONES';
+    } else {
+      nb.classList.remove('ok');
+      nb.textContent = labels.default || 'NOTIFICACIONES';
+    }
+  }
+
+  setState();
+
+  nb.addEventListener('click', async (e)=>{
+    e.preventDefault();
+    if (typeof Notification === 'undefined'){
+      alert('Este dispositivo no soporta notificaciones.');
+      return;
+    }
+    if (Notification.permission === 'granted'){
+      nb.classList.add('loading');
+      nb.textContent = '⏳ NOTIFICACIONES';
+      try{
+        await obtenerToken();
+        await setState();
+      } finally {
+        nb.classList.remove('loading');
+      }
+      return;
+    }
     nb.classList.add('loading');
     nb.textContent = '⏳ NOTIFICACIONES';
     try{
-      await obtenerToken();
+      const perm = await Notification.requestPermission();
+      if (perm === 'granted'){
+        await obtenerToken();
+      }
       await setState();
     } finally {
       nb.classList.remove('loading');
     }
-    return;
-  }
-  nb.classList.add('loading');
-  nb.textContent = '⏳ NOTIFICACIONES';
-  try{
-    const perm = await Notification.requestPermission();
-    if (perm === 'granted'){
-      await obtenerToken();
-    }
-    await setState();
-  } finally {
-    nb.classList.remove('loading');
-  }
-});
-
-// (Opcional) si cambia el display-mode, actualiza visibilidad
-if (window.matchMedia) {
-  const mq = window.matchMedia('(display-mode: standalone)');
-  mq.addEventListener?.('change', () => {
-    const st = mq.matches || (window.navigator.standalone === true);
-    nb.style.display = st ? '' : 'none';
   });
-}
+
+  // (Opcional) si cambia el display-mode, actualiza visibilidad
+  if (window.matchMedia) {
+    const mq = window.matchMedia('(display-mode: standalone)');
+    mq.addEventListener?.('change', () => {
+      const st = mq.matches || (window.navigator.standalone === true);
+      nb.style.display = st ? '' : 'none';
+    });
+  }
 })();
 
 /* ───────── Logo giratorio ───────── */
