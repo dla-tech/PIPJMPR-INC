@@ -694,3 +694,125 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
   if(p.width)  logo.style.width=p.width;
   if(cfg.floatingLogo?.spin?.speed) logo.style.animationDuration=cfg.floatingLogo.spin.speed;
 })();
+/* ───────── Hoja de Notificación (overlay) ───────── */
+(function(){
+  if(!window.__CFG_ALLOWED) return;
+  const cfg = window.APP_CONFIG || {};
+
+  function parseHashNotif(){
+    if (!location.hash.startsWith('#/notif')) return null;
+    const idx = location.hash.indexOf('?');
+    const q = new URLSearchParams(idx >= 0 ? location.hash.slice(idx+1) : '');
+    const raw = {
+      title: q.get('title') || 'Notificación',
+      body:  q.get('body')  || '',
+      date:  q.get('date')  || '',
+      image: q.get('image') || '',
+      link:  q.get('link')  || ''
+    };
+    return normalizePayload(raw);
+  }
+
+  // Acepta DD/MM/AAAA o YYYY-MM-DD → devuelve YYYYMMDD (para embed)
+  function toEmbedDate(s){
+    if (!s) return null;
+    const a = s.trim();
+    // YYYY-MM-DD
+    let m = a.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (m) return `${m[1]}${m[2]}${m[3]}`;
+    // DD/MM/AAAA
+    m = a.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (m) return `${m[3]}${m[2]}${m[1]}`;
+    return null;
+  }
+
+  function normalizePayload(p){
+    const dYmd = toEmbedDate(p.date);
+    return {
+      title: String(p.title||'Notificación').slice(0,140),
+      body:  String(p.body||''),
+      image: p.image || '',
+      link:  p.link || '',
+      ymd:   dYmd
+    };
+  }
+
+  function ensureOverlay(){
+    let ov = document.getElementById('notif-overlay');
+    if (ov) return ov;
+    ov = document.createElement('div');
+    ov.id = 'notif-overlay';
+    ov.style.cssText = `
+      position: fixed; inset: 0; z-index: 100000;
+      background: rgba(0,0,0,.65);
+      display: none; align-items: center; justify-content: center;
+      padding: 20px;
+    `;
+    const card = document.createElement('div');
+    card.id = 'notif-card';
+    card.style.cssText = `
+      max-width: 880px; width: 96vw; max-height: 90vh; overflow: auto;
+      background: #fff; border-radius: 14px; box-shadow: 0 12px 40px rgba(0,0,0,.3);
+      padding: 16px;
+    `;
+    ov.appendChild(card);
+    document.body.appendChild(ov);
+    return ov;
+  }
+
+  function renderNotifView(payload){
+    const ov = ensureOverlay();
+    const card = document.getElementById('notif-card');
+    const closeBtn = `
+      <button id="notif-close" style="
+        display:block;width:100%;margin:12px 0 0;padding:12px;
+        background:#dc2626;color:#fff;border:0;border-radius:10px;
+        font-weight:800
+      ">Cerrar</button>`;
+
+    const img = payload.image
+      ? `<img src="${payload.image}" alt="" style="width:100%;border-radius:10px;margin:8px 0 12px 0;box-shadow:0 4px 12px rgba(0,0,0,.18)" loading="lazy">`
+      : '';
+
+    const link = payload.link
+      ? `<p style="margin:10px 0 0"><a href="${payload.link}" target="_blank" rel="noopener" style="font-weight:700;color:#2563eb;text-decoration:none">Abrir enlace</a></p>`
+      : '';
+
+    let calendar = '';
+    if (payload.ymd && cfg.calendars?.google?.calendarId){
+      const calId = encodeURIComponent(cfg.calendars.google.calendarId);
+      const tz    = encodeURIComponent((cfg.ics?.timeZone || 'America/Puerto_Rico'));
+      // Vista agenda “del día”: dates=YYYYMMDD/YYYYMMDD
+      const src = `https://calendar.google.com/calendar/embed?src=${calId}&ctz=${tz}&mode=AGENDA&showNav=0&showDate=0&showPrint=0&showTabs=0&showCalendars=0&showTz=0&wkst=1&bgcolor=%23ffffff&dates=${payload.ymd}/${payload.ymd}`;
+      calendar = `
+        <div style="margin-top:14px">
+          <iframe src="${src}" title="Agenda del día" style="width:100%;height:420px;border:0;border-radius:10px" loading="lazy"></iframe>
+        </div>`;
+    }
+
+    card.innerHTML = `
+      <h3 style="margin:4px 2px 8px;font:800 18px/1.25 system-ui,-apple-system,Segoe UI,Roboto,Arial">${payload.title}</h3>
+      <div style="font:400 15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Arial;white-space:pre-wrap">${payload.body}</div>
+      ${img}
+      ${link}
+      ${calendar}
+      ${closeBtn}
+    `;
+
+    ov.style.display = 'flex';
+    $('#notif-close', ov)?.addEventListener('click', ()=>{
+      ov.style.display = 'none';
+      // Limpia el hash para “volver” a la app
+      history.replaceState(null, '', location.pathname + location.search);
+    }, { once:true });
+  }
+
+  async function maybeShowFromHash(){
+    const p = parseHashNotif();
+    if (!p) return;
+    renderNotifView(p);
+  }
+
+  window.addEventListener('hashchange', maybeShowFromHash);
+  window.addEventListener('load',       maybeShowFromHash, { once:true });
+})();
