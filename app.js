@@ -427,17 +427,62 @@ nb.style.display = isStandaloneNow ? '' : 'none';
   if(!window.__CFG_ALLOWED) return;
   const cfg = window.APP_CONFIG;
   const btn = $('#'+(cfg.pwa?.install?.buttonId||'btn-install')); if(!btn) return;
+
+  // Mostrar SOLO en navegador (no en PWA instalada)
   const isStandalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || (window.navigator.standalone===true);
   if(isStandalone){ btn.style.display='none'; return; }
+
+  // Detectamos plataforma
+  const isAndroid = /Android/i.test(navigator.userAgent);
+  const isIOS     = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+  // Mantén soporte para Android (beforeinstallprompt) sin refrescar la página
   let deferredPrompt=null;
-  window.addEventListener('beforeinstallprompt',(e)=>{ e.preventDefault(); deferredPrompt=e; btn.style.display=''; btn.disabled=false; });
+  window.addEventListener('beforeinstallprompt', (e)=>{
+    e.preventDefault();
+    deferredPrompt = e;
+    btn.style.display = '';
+    btn.disabled = false;
+  });
+
+  // Click del botón: en Android usa el prompt nativo; en iOS/otros usa Web Share si existe; si no, muestra instrucciones
   btn.addEventListener('click', async (ev)=>{
     ev.preventDefault();
-    if(!deferredPrompt){ alert(cfg.pwa?.install?.fallbackTutorial || 'Busca "Agregar a Inicio" en el menú.'); return; }
-    deferredPrompt.prompt(); try{ await deferredPrompt.userChoice; }catch(_){}
-    deferredPrompt=null;
+
+    // ANDROID: usa el prompt nativo cuando está disponible
+    if (isAndroid && deferredPrompt){
+      try{
+        deferredPrompt.prompt();
+        await deferredPrompt.userChoice; // accepted | dismissed
+      }catch(_){}
+      deferredPrompt = null; // el evento se usa una sola vez
+      return; // no refrescar
+    }
+
+    // iOS / Navegadores con Web Share API: abre la hoja de compartir sin refrescar
+    if (navigator.share){
+      try{
+        await navigator.share({
+          title: document.title || (cfg.meta?.appName || 'Mi App'),
+          text: cfg.pwa?.install?.shareText || 'Instala la app en tu pantalla de inicio',
+          url: location.href
+        });
+      }catch(_){/* usuario canceló o no hay share */}
+      return; // no refrescar
+    }
+
+    // Fallback universal: guía sin cambiar location
+    alert(
+      cfg.pwa?.install?.fallbackTutorial ||
+      (isIOS
+        ? 'En iPhone/iPad: Toca el botón Compartir y luego "Agregar a Inicio".'
+        : 'En tu navegador: abre el menú y elige "Agregar a la pantalla de inicio".'
+      )
+    );
   });
-  window.addEventListener('appinstalled',()=>{ btn.style.display='none'; });
+
+  // Si se instala (Android), ocultar el botón
+  window.addEventListener('appinstalled', ()=>{ btn.style.display='none'; });
 })();
 
 /* ───────── Firebase + notifs ───────── */
