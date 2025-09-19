@@ -461,37 +461,68 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
   const cfg = window.APP_CONFIG;
   const btn = $('#'+(cfg.pwa?.install?.buttonId||'btn-install')); if(!btn) return;
 
-  const isStandalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || (window.navigator.standalone===true);
-  if(isStandalone){ btn.style.display='none'; return; }
+  // Ocultar si ya está instalada como PWA
+  const isStandalone =
+    (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
+    (window.navigator.standalone === true);
+  if (isStandalone){ btn.style.display='none'; return; }
 
+  // Plataforma
   const isAndroid = /Android/i.test(navigator.userAgent);
   const isIOS     = /iPhone|iPad|iPod/i.test(navigator.userAgent);
 
-  let deferredPrompt=null;
+  // beforeinstallprompt (Android y navegadores compatibles)
+  let deferredPrompt = null;
   window.addEventListener('beforeinstallprompt', (e)=>{
-    e.preventDefault(); deferredPrompt=e; btn.style.display=''; btn.disabled=false;
+    e.preventDefault();
+    deferredPrompt = e;
+    btn.style.display = '';
+    btn.disabled = false;
   });
+
+  // Click del botón "Descargar App"
   btn.addEventListener('click', async (ev)=>{
     ev.preventDefault();
-    if (isAndroid && deferredPrompt){
-      try{ deferredPrompt.prompt(); await deferredPrompt.userChoice; }catch(_){}
-      deferredPrompt=null; return;
+
+    // ✅ iOS: SIEMPRE mostrar instrucciones (no abrir hoja de compartir)
+    if (isIOS){
+      alert(
+        'Paso 1: Toca los 3 puntos (abajo derecha o arriba).\n' +
+        '(De no ver los tres puntos [...] presiona "compartir" abajo [cuadro con flecha hacia arrina[).\n' +
+        'Paso 2: Presiona "Compartir".\n' +
+        'Paso 3: Desliza hacia abajo y presiona "Agregar a Inicio".\n' +
+        'Paso 4: Arriba derecha presiona "Agregar" (botón azul).'
+      );
+      return;
     }
+
+    // ✅ Android: usar el prompt nativo si está disponible
+    if (isAndroid && deferredPrompt){
+      try{
+        deferredPrompt.prompt();
+        await deferredPrompt.userChoice; // accepted | dismissed
+      }catch(_){}
+      deferredPrompt = null; // se usa una sola vez
+      return;
+    }
+
+    // Otros navegadores de escritorio: Web Share si existe…
     if (navigator.share){
       try{
-        await navigator.share({ title: document.title || (cfg.meta?.appName || 'Mi App'),
-          text: cfg.pwa?.install?.shareText || 'Instala la app en tu pantalla de inicio', url: location.href });
+        await navigator.share({
+          title: document.title || (cfg.meta?.appName || 'Mi App'),
+          text: cfg.pwa?.install?.shareText || 'Instala la app en tu pantalla de inicio',
+          url: location.href
+        });
       }catch(_){}
       return;
     }
-    alert(
-      cfg.pwa?.install?.fallbackTutorial ||
-      (isIOS
-        ? 'Paso 1: Presiona “Compartir”\nPaso 2: “Agregar a Inicio”\nPaso 3: “Agregar”'
-        : 'En tu navegador: menú → “Agregar a la pantalla de inicio”.'
-      )
-    );
+
+    // …o fallback genérico
+    alert('En tu navegador: abre el menú y elige "Agregar a la pantalla de inicio".');
   });
+
+  // Ocultar el botón si el usuario instala la PWA
   window.addEventListener('appinstalled', ()=>{ btn.style.display='none'; });
 })();
 
