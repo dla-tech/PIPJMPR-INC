@@ -381,23 +381,25 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
 })();
 
 /* ───────── Promos (JSON) ───────── */
+/* ───────── Promos (JSON) ───────── */
 (function(){
   if(!window.__CFG_ALLOWED) return;
   const url = window.APP_CONFIG?.promos?.manifestUrl; if(!url) return;
   const section = $('#promos'); const grid = el('div',{id:'promoGrid',className:'promo-grid'});
   section.innerHTML=''; section.appendChild(grid);
   const actions=el('div',{className:'promo-actions'});
-  const btnAll=el('button',{id:'btn-descargar-todo',className:'promo-dl',textContent:(window.APP_CONFIG?.promos?.grid?.downloadAllLabel)||'⬆️DESCARGAR PROMOS⬆️'}); actions.appendChild(btnAll);
+  const btnAll=el('button',{id:'btn-descargar-todo',className:'promo-dl',textContent:(window.APP_CONFIG?.promos?.grid?.downloadAllLabel)||'⬆️DESCARGAR PROMOS⬆️'}); 
+  actions.appendChild(btnAll);
   section.appendChild(actions);
 
-  // ⚖️ Promos “finas” de ancho, altura natural y grid centrado
+  // ⚖️ Promos más finas y responsivas
   function computeMinWidthByCount(n){
-    if(n===1) return '330px';  // ajusta aquí si la quieres más ancha/estrecha
-    if(n===2) return '270px';
+    if(n===1) return '340px';
+    if(n===2) return '280px';
     if(n<=4) return '240px';
-    if(n<=6) return '210px';
-    if(n<=9) return '190px';
-    return '170px';
+    if(n<=6) return '200px';
+    if(n<=9) return '180px';
+    return '160px';
   }
 
   function render(promos){
@@ -408,22 +410,19 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
     const minW = computeMinWidthByCount(promos.length);
     grid.style.setProperty('--min', minW);
     grid.style.display='grid';
-    grid.style.gridTemplateColumns='repeat(auto-fill, minmax(var(--min), var(--min)))';
-    grid.style.justifyContent='center';
+    grid.style.gridTemplateColumns='repeat(auto-fill, minmax(var(--min), 1fr))';
     grid.style.gap='12px';
 
     grid.innerHTML = promos.map((p,i)=>`
-      <article class="promo-card" data-index="${i}"
-               style="width:var(--min);max-width:100%;background:#fff;border-radius:14px;
-                      box-shadow:0 10px 28px rgba(0,0,0,.18);overflow:hidden">
+      <article class="promo-card" data-index="${i}" style="width:var(--min);max-width:100%;overflow:hidden">
         <a class="promo-link" href="${p.img}" data-filename="${p.filename || `promo-${i+1}.jpg`}" download style="display:block">
-          <div class="promo-media" style="padding:8px">
-            <img src="${p.img}" alt="${p.title?p.title:`Promoción ${i+1}`}"
-                 loading="lazy" decoding="async"
+          <div class="promo-media">
+            <img src="${p.img}" alt="${p.title?p.title:`Promoción ${i+1}`}" 
+                 loading="lazy" decoding="async" 
                  style="display:block;width:100%;height:auto;border-radius:12px" />
           </div>
         </a>
-        ${p.title?`<div class="promo-title" style="padding:0 10px 10px;font:600 14px system-ui;text-align:center">${p.title}</div>`:''}
+        ${p.title?`<div class="promo-title" style="padding:6px 4px 0;font:600 14px system-ui;text-align:center">${p.title}</div>`:''}
       </article>`).join('');
 
     section.style.display = promos.length?'block':'none';
@@ -445,6 +444,7 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
       const a=el('a',{href:o,download:filename}); document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(o);
     }catch{ const a=el('a',{href:url,download:filename}); document.body.appendChild(a); a.click(); a.remove(); }
   }
+
   (async function load(){
     try{
       const res=await fetch(url+'?t='+Date.now(),{cache:'no-store'}); if(!res.ok) throw new Error('HTTP '+res.status);
