@@ -168,16 +168,13 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
     const WEB_URL = (cfg.calendars?.google?.webUrlPrefix||'https://calendar.google.com/calendar/u/0/r?cid=') + encodeURIComponent(CAL_ID);
     const ICLOUD = cfg.calendars?.icloudWebcal||'';
 
-    $('#btn-ios')?.addEventListener('click', (e) => {
-  e.preventDefault();
-  alert(
-    "📲 Para instalar la app en tu iPhone/iPad:\n\n" +
-    "Paso 1. Tocar los 3 puntos abajo derecha o arriba derecha.\n\n" +
-    "Paso 2. Presionar \"Compartir\".\n\n" +
-    "Paso 3. Deslizar hacia abajo y presionar \"Agregar a Inicio\".\n\n" +
-    "Paso 4. Presionar arriba derecha \"Agregar\" (botón azul)."
-  );
-});
+    $('#btn-ios')?.addEventListener('click', (e)=>{
+      e.preventDefault();
+      if(!ICLOUD) return;
+      const go=url=>{ if(window.self!==window.top && isIOS) window.top.location.href=url; else location.href=url; };
+      go(ICLOUD);
+      setTimeout(()=>alert("Si no se abrió el calendario, copia y pega este enlace en Safari:\n"+ICLOUD),2500);
+    });
 
     const choice=$('#gcal-choice'), openWeb=$('#gcal-open-web'), openApp=$('#gcal-open-app'), cancel=$('#gcal-cancel');
     const show=()=>choice&&(choice.style.display='flex'), hide=()=>choice&&(choice.style.display='none');
