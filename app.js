@@ -381,7 +381,6 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
 })();
 
 /* ───────── Promos (JSON) ───────── */
-/* ───────── Promos (JSON) ───────── */
 (function(){
   if(!window.__CFG_ALLOWED) return;
   const url = window.APP_CONFIG?.promos?.manifestUrl; if(!url) return;
