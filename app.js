@@ -1,5 +1,23 @@
 /* app.js */
 
+/* ───────── Failsafe de preload: SIEMPRE quita el loader y el estilo ocultador ───────── */
+(function(){
+  function killLoader(){
+    try{
+      document.documentElement.classList.remove('loading');
+      const st = document.getElementById('preload-style'); if(st) st.remove();
+      const ld = document.getElementById('loader');
+      if (ld){
+        ld.classList.add('hide');
+        setTimeout(()=>{ try{ ld.remove(); }catch(_){ } }, 1200);
+      }
+    }catch(_){}
+  }
+  // quita en cuanto haya DOM y además por timeout para PWAs tercas
+  window.addEventListener('DOMContentLoaded', ()=>killLoader(), {once:true});
+  setTimeout(killLoader, 3000);
+})();
+
 const $  = (s,r=document)=>r.querySelector(s);
 const el = (t,p={})=>Object.assign(document.createElement(t),p);
 const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
@@ -20,8 +38,7 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
   }
 })();
 
-/* ───────── Theme/Meta/Loader ───────── */
-/* ⚠️ Importante: este bloque NO usa el guard para que el loader siempre se quite */
+/* ───────── Theme/Meta/Loader (independiente del guard) ───────── */
 (function(){
   const cfg = window.APP_CONFIG || {};
 
@@ -34,7 +51,7 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
   if(cfg.layout?.pageBackground?.image) cssv('--bg-img', `url("${cfg.layout.pageBackground.image}")`);
   if(cfg.layout?.pageBackground?.overlay) cssv('--overlay', cfg.layout.pageBackground.overlay);
 
-  // Loader
+  // Loader normal (además del failsafe de arriba)
   const L = cfg.loader||{};
   const loader = $('#loader');
   if(loader){
@@ -45,7 +62,7 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
       img.style.objectPosition=L.objectPosition||'50% 45%';
       loader.appendChild(img);
     }
-    const MIN = +L.minVisibleMs||1500, FADE=+L.fadeMs||2000, HARD=(+L.hardFallbackMs||MIN+FADE+1500);
+    const MIN = +L.minVisibleMs||1000, FADE=+L.fadeMs||800, HARD=(+L.hardFallbackMs||MIN+FADE+1200);
     const start=performance.now();
     const done=()=>{
       document.documentElement.classList.remove('loading');
@@ -78,14 +95,13 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
     nav.appendChild(el('a',{href:l.href||'#',textContent:l.label||l.id||'Link',className:'navlink'}));
   });
 
-  // 🔔 notif + install
+  // 🔔 notif + install (campana SIEMPRE visible)
   const nb = el('a',{
     id: cfg.nav?.notifButton?.id || 'btn-notifs',
     className: 'navlink',
     href: '#',
     textContent: '🔔 Notificaciones'
   });
-  // 👉 Mostrar SIEMPRE la campana
   nb.style.display = '';
 
   const ibCfg = cfg.nav?.installButton;
@@ -118,7 +134,7 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
   const h1=el('h1'); h1.style.cssText='font-size:1.35em;line-height:1.25;font-weight:700;color:#fff;text-align:center;margin:10px 0 14px';
   h1.textContent = "Primera Iglesia Pentecostal de Jesucristo de Maunabo, P.R. Inc.";
 
-  // ✅ Reutiliza el #promos del HTML
+  // Reutiliza el #promos del HTML
   const promosWrap = $('#promos');
   if (promosWrap){
     promosWrap.className = 'promos-wrap';
@@ -441,7 +457,7 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
   const isAndroid = /Android/i.test(navigator.userAgent);
   const isIOS     = /iPhone|iPad|iPod/i.test(navigator.userAgent);
 
-  // Mantén soporte para Android (beforeinstallprompt) sin refrescar la página
+  // Mantén soporte para Android (beforeinstallprompt)
   let deferredPrompt=null;
   window.addEventListener('beforeinstallprompt', (e)=>{
     e.preventDefault();
@@ -579,7 +595,6 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
   const nb = $('#'+(cfg.nav?.notifButton?.id||'btn-notifs'));
   if (!nb) return;
 
-  // 👉 Mostrar SIEMPRE el botón
   nb.style.display = ''; nb.style.pointerEvents = 'auto';
 
   async function setState(){
@@ -604,7 +619,7 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
   }
   setState();
 
-  // El click lo maneja el módulo de bandeja (abrir/cerrar panel)
+  // El click real lo usa la bandeja
   nb.addEventListener('click', (e)=>{ e.preventDefault(); });
 })();
 
@@ -750,7 +765,7 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
   };
   if (inboxCfg.enabled === false) return;
 
-  // === Storage (localStorage) ===
+  // Storage
   const KEY = inboxCfg.storageKey || 'notifs';
   const MAX = +inboxCfg.maxItems > 0 ? +inboxCfg.maxItems : 200;
 
@@ -768,7 +783,6 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
       link:  n.link ||'',
       read:  !!n.read
     };
-    // evita duplicados exactos en 5 min
     const five = Date.now()-5*60*1000;
     const dup = list.find(x => x.ts>five && x.title===item.title && x.body===item.body);
     if (!dup) list.unshift(item);
@@ -778,12 +792,11 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
   const markAllRead = ()=>{ const a=load(); a.forEach(x=>x.read=true); save(a); return a; };
   const delById     = (id)=>{ const a=load().filter(x=>x.id!==id); save(a); return a; };
 
-  // === UI: badge + panel ===
+  // UI: badge + panel
   const btnId = (cfg.nav?.notifButton?.id) || 'btn-notifs';
   const btn   = document.getElementById(btnId);
   if (!btn) return;
 
-  // Badge (9+)
   let badge = document.getElementById('notif-badge');
   if (!badge) {
     badge = document.createElement('span');
@@ -805,7 +818,6 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
     }
   }
 
-  // Panel
   const panel = document.createElement('div');
   panel.id = 'notif-panel';
   panel.style.cssText = 'position:fixed;top:58px;right:16px;width:min(92vw,420px);max-height:70vh;overflow:auto;background:#fff;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.2);display:none;z-index:100001';
@@ -850,13 +862,8 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
   function openPanel(){ render(); panel.style.display='block'; }
   function closePanel(){ panel.style.display='none'; }
 
-  // Click en la campanita: abrir/cerrar panel
-  const btn = document.getElementById((cfg.nav?.notifButton?.id) || 'btn-notifs');
-  if (btn) {
-    btn.addEventListener('click', (e)=>{ e.preventDefault(); panel.style.display==='block'?closePanel():openPanel(); });
-  }
+  btn.addEventListener('click', (e)=>{ e.preventDefault(); panel.style.display==='block'?closePanel():openPanel(); });
 
-  // Acciones del panel
   panel.addEventListener('click', (e)=>{
     const b = e.target.closest('button'); if(!b) return;
     const id = b.getAttribute('data-id');
@@ -873,7 +880,6 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
         if (it.link)  qs.set('link',  it.link);
         location.hash = '/notif?'+qs.toString();
 
-        // marcar leída
         const list = load();
         const i = list.findIndex(x=>x.id===id);
         if (i>=0) { list[i].read = true; save(list); }
@@ -891,7 +897,6 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
   document.getElementById('notif-markall')?.addEventListener('click', ()=>{ save(markAllRead()); render(); updateBadge(); });
   document.getElementById('notif-closep')?.addEventListener('click', closePanel);
 
-  // Mensajes del SW: guardar nuevas y marcar leídas cuando se abre desde la noti del sistema
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.addEventListener('message', (ev)=>{
       const d = ev.data || {};
@@ -916,6 +921,5 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
     });
   }
 
-  // Arranque
   updateBadge();
 })();
