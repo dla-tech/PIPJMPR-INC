@@ -67,7 +67,7 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
   const cfg = window.APP_CONFIG;
   const header = $('#header'); if(!header) return;
 
-  header.style.backdropFilter = `saturate(${cfg.layout?.header?.glass?.saturate||1.2}) blur(${cfg.layout?.header?.glass?.blur||'8px'})`;
+  header.style.backdropFilter = `saturate(${cfg.layout?.header?.glass?.saturate||1.2}) blur(${cfg.layout?.header?.glass||'8px'})`;
   header.style.background = cfg.layout?.header?.bg || 'rgba(255,255,255,.55)';
   header.style.borderBottom = `1px solid ${cfg.layout?.header?.borderColor || 'rgba(0,0,0,.08)'}`;
 
@@ -85,7 +85,7 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
     href: '#',
     textContent: cfg.nav?.notifButton?.labels?.default || 'NOTIFICACIONES'
   });
-  // como antes: visible solo en PWA instalada
+  // visible solo en PWA instalada
   const isStandaloneNow =
     (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
     (window.navigator.standalone === true);
@@ -506,8 +506,17 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
 
   if('serviceWorker' in navigator){
     window.addEventListener('load', ()=>{
-      navigator.serviceWorker.register(cfg.firebase.serviceWorkers?.app||'./service-worker.js',{scope:'./'}).then(reg=>{window.appSW=reg}).catch(()=>{});
-      navigator.serviceWorker.register(cfg.firebase.serviceWorkers?.fcm||'./firebase-messaging-sw.js',{scope:'./'}).then(reg=>{window.fcmSW=reg}).catch(()=>{});
+      navigator.serviceWorker.register(cfg.firebase.serviceWorkers?.app||'./service-worker.js',{scope:'./'})
+        .then(reg=>{ window.appSW=reg })
+        .catch(()=>{});
+
+      navigator.serviceWorker.register(cfg.firebase.serviceWorkers?.fcm||'./firebase-messaging-sw.js',{scope:'./'})
+        .then(reg=>{
+          window.fcmSW=reg;
+          // Asegura referencia al SW activo (muy importante para getToken y mensajes)
+          navigator.serviceWorker.ready.then(r => { window.fcmSW = r; });
+        })
+        .catch(()=>{});
     },{once:true});
   }
 
@@ -782,13 +791,12 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
   };
   if (inboxCfg.enabled === false) return;
 
-  // Mostrar campana SOLO en PWA instalada
+  // Detecta PWA instalada (la UI solo aparece ahí)
   const isStandalone =
     (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
     (window.navigator.standalone === true);
-  if (!isStandalone) return;
 
-  // === Storage
+  // === Storage (activo SIEMPRE, para que entren notifs aun sin UI)
   const KEY = inboxCfg.storageKey || 'notifs';
   const MAX = +inboxCfg.maxItems > 0 ? +inboxCfg.maxItems : 200;
 
@@ -816,46 +824,50 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
   const markAllRead = ()=>{ const a=load(); a.forEach(x=>x.read=true); save(a); return a; };
   const delById     = (id)=>{ const a=load().filter(x=>x.id!==id); save(a); return a; };
 
-  // === UI: campana flotante + badge
-  const bell = document.createElement('button');
-  bell.id='notif-bell';
-  bell.setAttribute('aria-label','Bandeja de notificaciones');
-  bell.innerHTML='🔔';
-  bell.style.cssText='position:fixed;right:16px;bottom:16px;width:52px;height:52px;border-radius:999px;border:0;background:#111;color:#fff;font-size:22px;box-shadow:0 10px 30px rgba(0,0,0,.25);z-index:100002';
-  document.body.appendChild(bell);
+  // === UI: campana flotante + badge (SOLO si es standalone)
+  let bell=null, badge=null, panel=null;
 
-  const badge = document.createElement('span');
-  badge.id='notif-badge';
-  badge.style.cssText='position:absolute;top:-6px;right:-4px;background:#ef4444;color:#fff;border-radius:999px;padding:2px 7px;font:700 11px system-ui;line-height:1;display:none';
-  bell.appendChild(badge);
+  if (isStandalone) {
+    bell = document.createElement('button');
+    bell.id='notif-bell';
+    bell.setAttribute('aria-label','Bandeja de notificaciones');
+    bell.innerHTML='🔔';
+    bell.style.cssText='position:fixed;right:16px;bottom:16px;width:52px;height:52px;border-radius:999px;border:0;background:#111;color:#fff;font-size:22px;box-shadow:0 10px 30px rgba(0,0,0,.25);z-index:100002';
+    document.body.appendChild(bell);
 
-  const BADGE_MAX = +inboxCfg.badgeMax > 0 ? +inboxCfg.badgeMax : 9;
-  function updateBadge(){
-    const c = load().filter(x=>!x.read).length;
-    if (c>0){ badge.textContent = c > BADGE_MAX ? (BADGE_MAX + '+') : String(c); badge.style.display=''; }
-    else { badge.style.display='none'; }
+    badge = document.createElement('span');
+    badge.id='notif-badge';
+    badge.style.cssText='position:absolute;top:-6px;right:-4px;background:#ef4444;color:#fff;border-radius:999px;padding:2px 7px;font:700 11px system-ui;line-height:1;display:none';
+    bell.appendChild(badge);
+
+    panel = document.createElement('div');
+    panel.id = 'notif-panel';
+    panel.style.cssText = 'position:fixed;bottom:76px;right:16px;width:min(92vw,420px);max-height:70vh;overflow:auto;background:#fff;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.2);display:none;z-index:100001';
+    panel.innerHTML = `
+      <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid #eee;position:sticky;top:0;background:#fff;border-top-left-radius:12px;border-top-right-radius:12px">
+        <strong style="font:700 14px system-ui">${inboxCfg.ui?.title||'Notificaciones'}</strong>
+        <span style="margin-left:auto"></span>
+        <button id="notif-markall" style="background:#111;color:#fff;border:0;border-radius:8px;padding:6px 10px">${inboxCfg.ui?.markAllLabel||'Marcar leídas'}</button>
+        <button id="notif-closep" style="background:#6b7280;color:#fff;border:0;border-radius:8px;padding:6px 10px">${inboxCfg.ui?.closeLabel||'Cerrar'}</button>
+      </div>
+      <div id="notif-list" style="padding:8px 0"></div>
+    `;
+    document.body.appendChild(panel);
+
+    const openPanel = ()=>{ render(); panel.style.display='block'; };
+    const closePanel= ()=>{ panel.style.display='none'; };
+
+    bell.addEventListener('click', ()=>{ panel.style.display==='block'?closePanel():openPanel(); });
+    document.getElementById('notif-markall')?.addEventListener('click', ()=>{ save(markAllRead()); render(); updateBadge(); });
+    document.getElementById('notif-closep')?.addEventListener('click', closePanel);
   }
-
-  // Panel
-  const panel = document.createElement('div');
-  panel.id = 'notif-panel';
-  panel.style.cssText = 'position:fixed;bottom:76px;right:16px;width:min(92vw,420px);max-height:70vh;overflow:auto;background:#fff;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.2);display:none;z-index:100001';
-  panel.innerHTML = `
-    <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid #eee;position:sticky;top:0;background:#fff;border-top-left-radius:12px;border-top-right-radius:12px">
-      <strong style="font:700 14px system-ui">${inboxCfg.ui?.title||'Notificaciones'}</strong>
-      <span style="margin-left:auto"></span>
-      <button id="notif-markall" style="background:#111;color:#fff;border:0;border-radius:8px;padding:6px 10px">${inboxCfg.ui?.markAllLabel||'Marcar leídas'}</button>
-      <button id="notif-closep" style="background:#6b7280;color:#fff;border:0;border-radius:8px;padding:6px 10px">${inboxCfg.ui?.closeLabel||'Cerrar'}</button>
-    </div>
-    <div id="notif-list" style="padding:8px 0"></div>
-  `;
-  document.body.appendChild(panel);
 
   function esc(s){ return String(s).replace(/[&<>"]/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;' }[c])); }
 
   function render(){
     const list = load();
     const box  = document.getElementById('notif-list');
+    if (!box){ return; } // si no hay UI (no standalone), no renderizamos
     box.innerHTML = '';
     if (!list.length) {
       box.innerHTML = `<div style="padding:14px;color:#6b7280">${inboxCfg.ui?.emptyText||'Sin notificaciones'}</div>`;
@@ -878,14 +890,16 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
     }
   }
 
-  const openPanel = ()=>{ render(); panel.style.display='block'; };
-  const closePanel= ()=>{ panel.style.display='none'; };
+  // Badge (funciona aun sin UI; solo actualiza si existe)
+  const BADGE_MAX = +inboxCfg.badgeMax > 0 ? +inboxCfg.badgeMax : 9;
+  function updateBadge(){
+    if (!badge) return;
+    const c = load().filter(x=>!x.read).length;
+    if (c>0){ badge.textContent = c > BADGE_MAX ? (BADGE_MAX + '+') : String(c); badge.style.display=''; }
+    else { badge.style.display='none'; }
+  }
 
-  bell.addEventListener('click', ()=>{ panel.style.display==='block'?closePanel():openPanel(); });
-  document.getElementById('notif-markall')?.addEventListener('click', ()=>{ save(markAllRead()); render(); updateBadge(); });
-  document.getElementById('notif-closep')?.addEventListener('click', closePanel);
-
-  // Mensajes del SW → guarda nuevas
+  // Mensajes del SW → guarda nuevas (SIEMPRE activos)
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.addEventListener('message', (ev)=>{
       const d = ev.data || {};
@@ -910,44 +924,46 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
     });
   }
 
-  // Primer plano (evento que manda el módulo FCM UI)
+  // Primer plano (evento que manda el módulo FCM UI) — SIEMPRE activo
   window.addEventListener('app:notifIncoming',(e)=>{
     add(e.detail||{});
     updateBadge();
   });
 
-  // Abrir item → hoja
-  panel.addEventListener('click', (e)=>{
-    const b = e.target.closest('button'); if(!b) return;
-    const id = b.getAttribute('data-id');
-    const act = b.getAttribute('data-act');
+  // Abrir item → hoja (solo si existe UI)
+  if (isStandalone) {
+    panel.addEventListener('click', (e)=>{
+      const b = e.target.closest('button'); if(!b) return;
+      const id = b.getAttribute('data-id');
+      const act = b.getAttribute('data-act');
 
-    if (act === 'open') {
-      const it = load().find(x=>x.id===id);
-      if (it) {
-        const qs = new URLSearchParams();
-        qs.set('title', it.title);
-        qs.set('body',  it.body);
-        if (it.date)  qs.set('date',  it.date);
-        if (it.image) qs.set('image', it.image);
-        if (it.link)  qs.set('link',  it.link);
-        location.hash = '/notif?'+qs.toString();
+      if (act === 'open') {
+        const it = load().find(x=>x.id===id);
+        if (it) {
+          const qs = new URLSearchParams();
+          qs.set('title', it.title);
+          qs.set('body',  it.body);
+          if (it.date)  qs.set('date',  it.date);
+          if (it.image) qs.set('image', it.image);
+          if (it.link)  qs.set('link',  it.link);
+          location.hash = '/notif?'+qs.toString();
 
-        // marcar leída
-        const list = load();
-        const i = list.findIndex(x=>x.id===id);
-        if (i>=0) { list[i].read = true; save(list); }
+          // marcar leída
+          const list = load();
+          const i = list.findIndex(x=>x.id===id);
+          if (i>=0) { list[i].read = true; save(list); }
+          updateBadge();
+        }
+        panel.style.display='none';
+      }
+      if (act === 'del') {
+        save(delById(id));
+        render();
         updateBadge();
       }
-      closePanel();
-    }
-    if (act === 'del') {
-      save(delById(id));
-      render();
-      updateBadge();
-    }
-  });
+    });
+  }
 
   // Arranque
   updateBadge();
-})();
+})(); // ← importante punto y coma final
