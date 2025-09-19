@@ -168,13 +168,16 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
     const WEB_URL = (cfg.calendars?.google?.webUrlPrefix||'https://calendar.google.com/calendar/u/0/r?cid=') + encodeURIComponent(CAL_ID);
     const ICLOUD = cfg.calendars?.icloudWebcal||'';
 
-    $('#btn-ios')?.addEventListener('click', (e)=>{
-      e.preventDefault();
-      if(!ICLOUD) return;
-      const go=url=>{ if(window.self!==window.top && isIOS) window.top.location.href=url; else location.href=url; };
-      go(ICLOUD);
-      setTimeout(()=>alert("Si no se abrió el calendario, copia y pega este enlace en Safari:\n"+ICLOUD),2500);
-    });
+    $('#btn-ios')?.addEventListener('click', (e) => {
+  e.preventDefault();
+  alert(
+    "📲 Para instalar la app en tu iPhone/iPad:\n\n" +
+    "Paso 1. Tocar los 3 puntos abajo derecha o arriba derecha.\n\n" +
+    "Paso 2. Presionar \"Compartir\".\n\n" +
+    "Paso 3. Deslizar hacia abajo y presionar \"Agregar a Inicio\".\n\n" +
+    "Paso 4. Presionar arriba derecha \"Agregar\" (botón azul)."
+  );
+});
 
     const choice=$('#gcal-choice'), openWeb=$('#gcal-open-web'), openApp=$('#gcal-open-app'), cancel=$('#gcal-cancel');
     const show=()=>choice&&(choice.style.display='flex'), hide=()=>choice&&(choice.style.display='none');
@@ -966,4 +969,46 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
 
   // Arranque
   updateBadge();
-})(); // ← importante punto y coma final
+})(); 
+/* ───────── Extra: auto-link en notificaciones ───────── */
+(function(){
+  if(!window.__CFG_ALLOWED) return;
+
+  // Convierte fechas y URLs en <a> clickeables
+  function autoLink(text){
+    if(!text) return '';
+    let out = String(text);
+
+    // Detecta URLs (http/https)
+    const urlRegex = /(https?:\/\/[^\s]+)/gi;
+    out = out.replace(urlRegex, u=>{
+      return `<a href="${u}" target="_blank" rel="noopener" style="color:#2563eb;text-decoration:underline">${u}</a>`;
+    });
+
+    // Detecta fechas en formato YYYY-MM-DD
+    const dateRegex = /\b(\d{4}-\d{2}-\d{2})\b/g;
+    out = out.replace(dateRegex, d=>{
+      if(window.APP_CONFIG?.calendars?.google?.calendarId){
+        const calId = encodeURIComponent(window.APP_CONFIG.calendars.google.calendarId);
+        const tz    = encodeURIComponent(window.APP_CONFIG.ics?.timeZone || 'America/Puerto_Rico');
+        const dPlain = d.replace(/-/g,'');
+        const calUrl = `https://calendar.google.com/calendar/embed?src=${calId}&ctz=${tz}&dates=${dPlain}/${dPlain}`;
+        return `<a href="${calUrl}" target="_blank" rel="noopener" style="color:#16a34a;text-decoration:underline">${d}</a>`;
+      }
+      return d;
+    });
+
+    return out;
+  }
+
+  // Hook: cuando mostramos la notificación en overlay
+  window.renderNotifView = (function(orig){
+    return function(payload){
+      // Escapar contenido y aplicar autoLink
+      if(payload && payload.body){
+        payload.body = autoLink(payload.body);
+      }
+      orig(payload);
+    };
+  })(window.renderNotifView);
+})();// ← importante punto y coma final
