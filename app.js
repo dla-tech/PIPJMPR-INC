@@ -157,7 +157,6 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
   note.textContent='📌 Todo cambio en la programación de la iglesia se reflejará automáticamente en tu calendario.';
 
   sec.innerHTML=''; 
-  // Promos arriba, luego calendario
   if (promosWrap) sec.append(h1, promosWrap, card, grid, modal, note);
   else            sec.append(h1, card, grid, modal, note);
 
@@ -169,7 +168,6 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
     const WEB_URL = (cfg.calendars?.google?.webUrlPrefix||'https://calendar.google.com/calendar/u/0/r?cid=') + encodeURIComponent(CAL_ID);
     const ICLOUD = cfg.calendars?.icloudWebcal||'';
 
-    // iOS: webcal (no tocar tu flujo de instrucciones existente — aquí abre directo el link)
     $('#btn-ios')?.addEventListener('click', (e)=>{
       e.preventDefault();
       if(!ICLOUD) return;
@@ -392,15 +390,16 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
   const btnAll=el('button',{id:'btn-descargar-todo',className:'promo-dl',textContent:(window.APP_CONFIG?.promos?.grid?.downloadAllLabel)||'⬆️DESCARGAR PROMOS⬆️'}); actions.appendChild(btnAll);
   section.appendChild(actions);
 
-  // ⚖️ Promos más finas y responsivas (mejor proporción con el calendario)
+  // ⚖️ Promos “finas” de ancho, altura natural y grid centrado
   function computeMinWidthByCount(n){
-    if(n===1) return '340px';
-    if(n===2) return '280px';
+    if(n===1) return '330px';  // ajusta aquí si la quieres más ancha/estrecha
+    if(n===2) return '270px';
     if(n<=4) return '240px';
-    if(n<=6) return '200px';
-    if(n<=9) return '180px';
-    return '160px';
+    if(n<=6) return '210px';
+    if(n<=9) return '190px';
+    return '170px';
   }
+
   function render(promos){
     section.classList.toggle('one',promos.length===1);
     section.classList.toggle('two',promos.length===2);
@@ -409,17 +408,22 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
     const minW = computeMinWidthByCount(promos.length);
     grid.style.setProperty('--min', minW);
     grid.style.display='grid';
-    grid.style.gridTemplateColumns='repeat(auto-fill, minmax(var(--min), 1fr))';
+    grid.style.gridTemplateColumns='repeat(auto-fill, minmax(var(--min), var(--min)))';
+    grid.style.justifyContent='center';
     grid.style.gap='12px';
 
     grid.innerHTML = promos.map((p,i)=>`
-      <article class="promo-card" data-index="${i}" style="border-radius:12px;overflow:hidden;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.08)">
+      <article class="promo-card" data-index="${i}"
+               style="width:var(--min);max-width:100%;background:#fff;border-radius:14px;
+                      box-shadow:0 10px 28px rgba(0,0,0,.18);overflow:hidden">
         <a class="promo-link" href="${p.img}" data-filename="${p.filename || `promo-${i+1}.jpg`}" download style="display:block">
-          <div class="promo-media" style="aspect-ratio:16/9;overflow:hidden">
-            <img src="${p.img}" alt="${p.title?p.title:`Promoción ${i+1}`}" loading="lazy" decoding="async" style="width:100%;height:100%;object-fit:cover;display:block">
+          <div class="promo-media" style="padding:8px">
+            <img src="${p.img}" alt="${p.title?p.title:`Promoción ${i+1}`}"
+                 loading="lazy" decoding="async"
+                 style="display:block;width:100%;height:auto;border-radius:12px" />
           </div>
         </a>
-        ${p.title?`<div class="promo-title" style="padding:8px 10px;font:600 13px system-ui">${p.title}</div>`:''}
+        ${p.title?`<div class="promo-title" style="padding:0 10px 10px;font:600 14px system-ui;text-align:center">${p.title}</div>`:''}
       </article>`).join('');
 
     section.style.display = promos.length?'block':'none';
@@ -433,6 +437,7 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
       downloadImage(a.href, a.dataset.filename||'promocion.jpg');
     });
   }
+
   async function downloadImage(url, filename){
     try{
       const res=await fetch(url,{cache:'no-store'}); if(!res.ok) throw new Error('HTTP '+res.status);
