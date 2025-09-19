@@ -488,8 +488,8 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
     if (isIOS){
       alert(
         'Paso 1: Toca los 3 puntos (abajo derecha o arriba).\n' +
-        '(De no ver los tres puntos [...] presiona "compartir" abajo [cuadro con flecha hacia arrina[).\n' +
-        'Paso 2: Presiona "Compartir".\n' +
+        '(De no ver los tres puntos [...] presiona "compartir" abajo [cuadro con flecha hacia arriba]).\n' +
+        'Paso 2: Presiona "Compartir"\n' +
         'Paso 3: Desliza hacia abajo y presiona "Agregar a Inicio".\n' +
         'Paso 4: Arriba derecha presiona "Agregar" (botón azul).'
       );
