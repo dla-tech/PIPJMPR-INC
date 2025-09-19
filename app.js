@@ -20,26 +20,6 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
   }
 })();
 
-/* ───────── Sincronizar clic de notificación desde SW ───────── */
-(function(){
-  if(!window.__CFG_ALLOWED) return;
-  if (!('serviceWorker' in navigator)) return;
-
-  navigator.serviceWorker.addEventListener('message', (ev) => {
-    try{
-      if (ev.data && ev.data.type === 'go' && typeof ev.data.url === 'string') {
-        const u = new URL(ev.data.url, location.origin);
-        // Si el SW manda la URL completa, usamos el hash para navegar sin recargar
-        if (u.hash) {
-          if (!location.hash.includes(u.hash)) {
-            location.hash = u.hash;
-          }
-        }
-      }
-    }catch(_){}
-  });
-})();
-
 /* ───────── Theme/Meta/Loader ───────── */
 (function(){
   if(!window.__CFG_ALLOWED) return;
@@ -68,7 +48,7 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
     const MIN = +L.minVisibleMs||1500, FADE=+L.fadeMs||2000, HARD=(+L.hardFallbackMs||MIN+FADE+1500);
     const start=performance.now();
     const done=()=>{
-     document.documentElement.classList.remove('loading');
+      document.documentElement.classList.remove('loading');
       loader.classList.add('hide');
       $('#preload-style')?.remove();
       setTimeout(()=>{ try{ loader.remove(); }catch(_){ } }, FADE+100);
@@ -160,7 +140,7 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
     <h3 style="margin:0 0 10px">¿Cómo quieres abrirlo?</h3>
     <a id="gcal-open-web" class="btn btn-g" href="#">🌐 Abrir en la web</a>
     <button id="gcal-open-app" class="btn-d">📱 Abrir en la app</button>
-    <button id="gcal-cancel" class="btn-d" style="background:#6b7280">Cancelar</button>
+    <button id="gcal-cancel" className="btn-d" style="background:#6b7280">Cancelar</button>
   </div>`;
 
   const note = el('p'); note.className='card note'; note.style.marginTop='12px';
@@ -474,13 +454,13 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
     if (isAndroid && deferredPrompt){
       try{
         deferredPrompt.prompt();
-        await deferredPrompt.userChoice; // accepted | dismissed
+        await deferredPrompt.userChoice;
       }catch(_){}
-      deferredPrompt = null; // el evento se usa una sola vez
-      return; // no refrescar
+      deferredPrompt = null;
+      return;
     }
 
-    // iOS / Navegadores con Web Share API: abre la hoja de compartir sin refrescar
+    // iOS / Web Share
     if (navigator.share){
       try{
         await navigator.share({
@@ -488,11 +468,11 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
           text: cfg.pwa?.install?.shareText || 'Instala la app en tu pantalla de inicio',
           url: location.href
         });
-      }catch(_){/* usuario canceló o no hay share */}
-      return; // no refrescar
+      }catch(_){}
+      return;
     }
 
-    // Fallback universal: guía sin cambiar location
+    // Fallback
     alert(
       cfg.pwa?.install?.fallbackTutorial ||
       (isIOS
@@ -502,11 +482,10 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
     );
   });
 
-  // Si se instala (Android), ocultar el botón
   window.addEventListener('appinstalled', ()=>{ btn.style.display='none'; });
 })();
 
-/* ───────── Firebase + notifs ───────── */
+/* ───────── Firebase + notifs (permisos/token UI, sin abrir hoja por clic) ───────── */
 (function(){
   if(!window.__CFG_ALLOWED) return;
   const cfg=window.APP_CONFIG; if(!cfg.firebase?.app) return;
@@ -522,16 +501,13 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
     },{once:true});
   }
 
-  // Promesa única para esperar el SW de FCM
+  // Esperar SW FCM
   let __fcmRegPromise = null;
   function waitForFcmSW() {
     if (__fcmRegPromise) return __fcmRegPromise;
     __fcmRegPromise = new Promise(async (resolve, reject) => {
       try {
-        // Si ya está, resuelve de inmediato
         if (window.fcmSW) return resolve(window.fcmSW);
-
-        // Si no está, intenta registrarlo (por si el onload aún no corrió)
         if ('serviceWorker' in navigator) {
           try {
             const reg = await navigator.serviceWorker.register(
@@ -540,12 +516,8 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
             );
             window.fcmSW = reg;
             return resolve(reg);
-          } catch (e) {
-            // Si falla, espera un poco a que el registro “oficial” lo pueble
-          }
+          } catch (e) {}
         }
-
-        // Poll corto (hasta ~1.5s) por si el registro llega por el listener de load
         const started = Date.now();
         const tick = () => {
           if (window.fcmSW) return resolve(window.fcmSW);
@@ -560,9 +532,7 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
     return __fcmRegPromise;
   }
 
-  // Promesa única de token (evita dobles)
   let __fcmTokenPromise = null;
-
   async function guardarTokenFCM(token){
     try{ if(!window.db) return; const ua=navigator.userAgent||''; const ts=new Date().toISOString();
       await window.db.collection(cfg.firebase.firestore?.tokensCollection||'fcmTokens').doc(token).set({token,ua,ts},{merge:true});
@@ -572,23 +542,13 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
     if (!messaging) return null;
     if (!('Notification' in window)) return null;
     if (Notification.permission !== 'granted') return null;
-
-    // Si ya hay una petición en curso, reutilízala
     if (__fcmTokenPromise) return __fcmTokenPromise;
 
     __fcmTokenPromise = (async () => {
       try {
-        // 1) Espera SIEMPRE el SW de FCM (no usar appSW como fallback)
         const fcmReg = await waitForFcmSW();
-
-        // 2) Pide el token siempre contra ese registration
-        const opts = {
-          vapidKey: cfg.firebase.vapidPublicKey,
-          serviceWorkerRegistration: fcmReg
-        };
+        const opts = { vapidKey: cfg.firebase.vapidPublicKey, serviceWorkerRegistration: fcmReg };
         const token = await messaging.getToken(opts);
-
-        // 3) Guarda solo si cambia (opcional)
         if (token && cfg.firebase.firestore?.enabled !== false) {
           const prev = localStorage.getItem('fcm_token');
           if (token !== prev) {
@@ -601,43 +561,29 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
         console.error('getToken FCM:', e);
         return null;
       } finally {
-        // Permite nuevas peticiones solo después de resolver/rechazar
         __fcmTokenPromise = null;
       }
     })();
-
     return __fcmTokenPromise;
   }
-
-  // Comprueba si ya hay token válido; si no, intenta obtenerlo
   async function hasValidToken(){
     try{
       const prev = localStorage.getItem('fcm_token');
       if (prev && typeof prev === 'string' && prev.length > 10) return prev;
       const t = await obtenerToken();
       return t || null;
-    }catch(_){
-      return null;
-    }
+    }catch(_){ return null; }
   }
 
   const nb = $('#'+(cfg.nav?.notifButton?.id||'btn-notifs'));
   if (!nb) return;
 
-  // ¿Está instalada (standalone)?
   const isStandalone =
     (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
     (window.navigator.standalone === true);
 
-  if (!isStandalone) {
-    // En navegador normal: oculto
-    nb.style.display = 'none';
-    return;
-  }
-
-  // ✅ En PWA instalada: muéstralo explícitamente
-  nb.style.display = '';
-  nb.style.pointerEvents = 'auto'; // opcional
+  if (!isStandalone) { nb.style.display = 'none'; return; }
+  nb.style.display = ''; nb.style.pointerEvents = 'auto';
 
   async function setState(){
     const labels = cfg.nav?.notifButton?.labels || {};
@@ -659,7 +605,6 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
       nb.textContent = labels.default || 'NOTIFICACIONES';
     }
   }
-
   setState();
 
   nb.addEventListener('click', async (e)=>{
@@ -668,31 +613,15 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
       alert('Este dispositivo no soporta notificaciones.');
       return;
     }
-    if (Notification.permission === 'granted'){
-      nb.classList.add('loading');
-      nb.textContent = '⏳ NOTIFICACIONES';
-      try{
-        await obtenerToken();
-        await setState();
-      } finally {
-        nb.classList.remove('loading');
-      }
-      return;
-    }
     nb.classList.add('loading');
     nb.textContent = '⏳ NOTIFICACIONES';
     try{
-      const perm = await Notification.requestPermission();
-      if (perm === 'granted'){
-        await obtenerToken();
-      }
+      const perm = (Notification.permission === 'granted') ? 'granted' : await Notification.requestPermission();
+      if (perm === 'granted') await obtenerToken();
       await setState();
-    } finally {
-      nb.classList.remove('loading');
-    }
+    } finally { nb.classList.remove('loading'); }
   });
 
-  // (Opcional) si cambia el display-mode, actualiza visibilidad
   if (window.matchMedia) {
     const mq = window.matchMedia('(display-mode: standalone)');
     mq.addEventListener?.('change', () => {
@@ -738,10 +667,8 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
   function toEmbedDate(s){
     if (!s) return null;
     const a = s.trim();
-    // YYYY-MM-DD
     let m = a.match(/^(\d{4})-(\d{2})-(\d{2})$/);
     if (m) return `${m[1]}${m[2]}${m[3]}`;
-    // DD/MM/AAAA
     m = a.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
     if (m) return `${m[3]}${m[2]}${m[1]}`;
     return null;
@@ -803,7 +730,6 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
     if (payload.ymd && cfg.calendars?.google?.calendarId){
       const calId = encodeURIComponent(cfg.calendars.google.calendarId);
       const tz    = encodeURIComponent((cfg.ics?.timeZone || 'America/Puerto_Rico'));
-      // Vista agenda “del día”: dates=YYYYMMDD/YYYYMMDD
       const src = `https://calendar.google.com/calendar/embed?src=${calId}&ctz=${tz}&mode=AGENDA&showNav=0&showDate=0&showPrint=0&showTabs=0&showCalendars=0&showTz=0&wkst=1&bgcolor=%23ffffff&dates=${payload.ymd}/${payload.ymd}`;
       calendar = `
         <div style="margin-top:14px">
@@ -823,7 +749,6 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
     ov.style.display = 'flex';
     $('#notif-close', ov)?.addEventListener('click', ()=>{
       ov.style.display = 'none';
-      // Limpia el hash para “volver” a la app
       history.replaceState(null, '', location.pathname + location.search);
     }, { once:true });
   }
@@ -836,4 +761,181 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
 
   window.addEventListener('hashchange', maybeShowFromHash);
   window.addEventListener('load',       maybeShowFromHash, { once:true });
+})();
+
+/* ───────── Bandeja interna + badge (campanita) ───────── */
+(function(){
+  if(!window.__CFG_ALLOWED) return;
+
+  const cfg = window.APP_CONFIG || {};
+  const inboxCfg = cfg.inbox || { enabled: true, storageKey:'notifs', maxItems:200, badgeMax:9,
+    ui:{ title:'Notificaciones', markAllLabel:'Marcar leídas', closeLabel:'Cerrar', openLabel:'Abrir', deleteLabel:'Borrar', emptyText:'Sin notificaciones' }
+  };
+  if (inboxCfg.enabled === false) return;
+
+  // === Storage (localStorage) ===
+  const KEY = inboxCfg.storageKey || 'notifs';
+  const MAX = +inboxCfg.maxItems > 0 ? +inboxCfg.maxItems : 200;
+
+  const load = () => { try { return JSON.parse(localStorage.getItem(KEY)||'[]'); } catch { return []; } };
+  const save = (list) => { try { localStorage.setItem(KEY, JSON.stringify(list.slice(0, MAX))); } catch {} };
+  const add  = (n) => {
+    const list = load();
+    const item = {
+      id:   n.id   || (Date.now()+'-'+Math.random().toString(36).slice(2,8)),
+      ts:   +n.ts  || Date.now(),
+      title: String(n.title||'Notificación').slice(0,140),
+      body:  String(n.body||''),
+      date:  String(n.date||''),
+      image: n.image||'',
+      link:  n.link ||'',
+      read:  !!n.read
+    };
+    // evita duplicados exactos en 5 min
+    const five = Date.now()-5*60*1000;
+    const dup = list.find(x => x.ts>five && x.title===item.title && x.body===item.body);
+    if (!dup) list.unshift(item);
+    save(list);
+    return item;
+  };
+  const markAllRead = ()=>{ const a=load(); a.forEach(x=>x.read=true); save(a); return a; };
+  const delById     = (id)=>{ const a=load().filter(x=>x.id!==id); save(a); return a; };
+
+  // === UI: badge + panel ===
+  const btnId = (cfg.nav?.notifButton?.id) || 'btn-notifs';
+  const btn   = document.getElementById(btnId);
+  if (!btn) return;
+
+  // Badge (9+)
+  let badge = document.getElementById('notif-badge');
+  if (!badge) {
+    badge = document.createElement('span');
+    badge.id = 'notif-badge';
+    badge.style.cssText = 'position:absolute;top:-4px;right:-6px;background:#ef4444;color:#fff;border-radius:999px;padding:2px 7px;font:700 11px system-ui;line-height:1;display:none';
+    const cs = getComputedStyle(btn);
+    if (cs.position === 'static') btn.style.position = 'relative';
+    btn.appendChild(badge);
+  }
+
+  const BADGE_MAX = +inboxCfg.badgeMax > 0 ? +inboxCfg.badgeMax : 9;
+  function updateBadge(){
+    const c = load().filter(x=>!x.read).length;
+    if (c > 0) {
+      badge.textContent = c > BADGE_MAX ? (BADGE_MAX + '+') : String(c);
+      badge.style.display = '';
+    } else {
+      badge.style.display = 'none';
+    }
+  }
+
+  // Panel
+  const panel = document.createElement('div');
+  panel.id = 'notif-panel';
+  panel.style.cssText = 'position:fixed;top:58px;right:16px;width:min(92vw,420px);max-height:70vh;overflow:auto;background:#fff;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.2);display:none;z-index:100001';
+  panel.innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid #eee">
+      <strong style="font:700 14px system-ui">${inboxCfg.ui?.title||'Notificaciones'}</strong>
+      <span style="margin-left:auto"></span>
+      <button id="notif-markall" style="background:#111;color:#fff;border:0;border-radius:8px;padding:6px 10px">${inboxCfg.ui?.markAllLabel||'Marcar leídas'}</button>
+      <button id="notif-closep" style="background:#6b7280;color:#fff;border:0;border-radius:8px;padding:6px 10px">${inboxCfg.ui?.closeLabel||'Cerrar'}</button>
+    </div>
+    <div id="notif-list" style="padding:8px 0"></div>
+  `;
+  document.body.appendChild(panel);
+
+  function esc(s){ return String(s).replace(/[&<>"]/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;' }[c])); }
+
+  function render(){
+    const list = load();
+    const box  = document.getElementById('notif-list');
+    box.innerHTML = '';
+    if (!list.length) {
+      box.innerHTML = `<div style="padding:14px;color:#6b7280">${inboxCfg.ui?.emptyText||'Sin notificaciones'}</div>`;
+      return;
+    }
+    for (const n of list) {
+      const row = document.createElement('div');
+      row.style.cssText = `padding:10px 12px;border-bottom:1px solid #eee;${n.read?'opacity:.65':''}`;
+      row.innerHTML = `
+        <div style="display:flex;gap:8px;align-items:baseline">
+          <strong style="font:700 14px system-ui;flex:1">${esc(n.title)}</strong>
+          <small style="color:#6b7280">${new Date(n.ts).toLocaleString()}</small>
+        </div>
+        <div style="font:400 13px/1.5 system-ui;white-space:pre-wrap;margin:4px 0 8px">${esc(n.body)}</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button data-id="${n.id}" data-act="open" style="background:#2563eb;color:#fff;border:0;border-radius:8px;padding:6px 10px">${inboxCfg.ui?.openLabel||'Abrir'}</button>
+          <button data-id="${n.id}" data-act="del"  style="background:#dc2626;color:#fff;border:0;border-radius:8px;padding:6px 10px">${inboxCfg.ui?.deleteLabel||'Borrar'}</button>
+        </div>`;
+      box.appendChild(row);
+    }
+  }
+
+  function openPanel(){ render(); panel.style.display='block'; }
+  function closePanel(){ panel.style.display='none'; }
+
+  // Click en la campanita: abrir/cerrar panel (no gestiona permisos/token)
+  btn.addEventListener('click', (e)=>{ e.preventDefault(); panel.style.display==='block'?closePanel():openPanel(); });
+
+  // Acciones del panel
+  panel.addEventListener('click', (e)=>{
+    const b = e.target.closest('button'); if(!b) return;
+    const id = b.getAttribute('data-id');
+    const act = b.getAttribute('data-act');
+
+    if (act === 'open') {
+      const it = load().find(x=>x.id===id);
+      if (it) {
+        const qs = new URLSearchParams();
+        qs.set('title', it.title);
+        qs.set('body',  it.body);
+        if (it.date)  qs.set('date',  it.date);
+        if (it.image) qs.set('image', it.image);
+        if (it.link)  qs.set('link',  it.link);
+        location.hash = '/notif?'+qs.toString();
+
+        // marcar leída
+        const list = load();
+        const i = list.findIndex(x=>x.id===id);
+        if (i>=0) { list[i].read = true; save(list); }
+        updateBadge();
+      }
+      closePanel();
+    }
+    if (act === 'del') {
+      save(delById(id));
+      render();
+      updateBadge();
+    }
+  });
+
+  document.getElementById('notif-markall')?.addEventListener('click', ()=>{ save(markAllRead()); render(); updateBadge(); });
+  document.getElementById('notif-closep')?.addEventListener('click', closePanel);
+
+  // Mensajes del SW: guardar nuevas y marcar leídas cuando se “abre” desde la noti del sistema
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('message', (ev)=>{
+      const d = ev.data || {};
+      if (d.type === 'notif:new' && d.payload) {
+        add(d.payload);
+        updateBadge();
+      }
+      if (d.type === 'notif:open' && typeof d.url === 'string') {
+        try{
+          const u = new URL(d.url, location.origin);
+          const q = new URLSearchParams(u.hash.split('?')[1]||'');
+          const t = decodeURIComponent(q.get('title') || '');
+          const b = decodeURIComponent(q.get('body')  || '');
+          const list = load(); let changed = false;
+          for (const x of list) {
+            if (!x.read && x.title===t && x.body===b) { x.read = true; changed = true; }
+          }
+          if (changed) save(list);
+          updateBadge();
+        }catch(_){}
+      }
+    });
+  }
+
+  // Arranque
+  updateBadge();
 })();
