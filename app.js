@@ -456,73 +456,42 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
 })();
 
 /* ───────── PWA install ───────── */
-/* ───────── PWA install ───────── */
 (function(){
   if(!window.__CFG_ALLOWED) return;
   const cfg = window.APP_CONFIG;
-  const btn = $('#'+(cfg.pwa?.install?.buttonId||'btn-install')); 
-  if(!btn) return;
+  const btn = $('#'+(cfg.pwa?.install?.buttonId||'btn-install')); if(!btn) return;
 
-  // Ocultar si ya está instalada
-  const isStandalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) 
-    || (window.navigator.standalone===true);
+  const isStandalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || (window.navigator.standalone===true);
   if(isStandalone){ btn.style.display='none'; return; }
 
-  // Detectamos plataforma
   const isAndroid = /Android/i.test(navigator.userAgent);
   const isIOS     = /iPhone|iPad|iPod/i.test(navigator.userAgent);
 
-  // Mantén soporte para Android (beforeinstallprompt)
   let deferredPrompt=null;
   window.addEventListener('beforeinstallprompt', (e)=>{
-    e.preventDefault();
-    deferredPrompt = e;
-    btn.style.display = '';
-    btn.disabled = false;
+    e.preventDefault(); deferredPrompt=e; btn.style.display=''; btn.disabled=false;
   });
-
-  // Click del botón
   btn.addEventListener('click', async (ev)=>{
     ev.preventDefault();
-
-    if (isIOS) {
-      alert(
-        "📲 Para instalar la app en tu iPhone/iPad:\n\n" +
-        "Paso 1. Tocar los 3 puntos abajo derecha o arriba.\n\n" +
-        "(De no tener los 3 puntos [...]presiona boton compartir en la parte inferior cuadro con [flecha hacia arriba])
-        "Paso 2. Presionar \"Compartir\".\n\n" +
-        "Paso 3. Deslizar hacia abajo y presionar \"Agregar a Inicio\".\n\n" +
-        "Paso 4. Presionar arriba derecha \"Agregar\" (botón azul)."
-      );
-      return;
-    }
-
     if (isAndroid && deferredPrompt){
-      try{
-        deferredPrompt.prompt();
-        await deferredPrompt.userChoice;
-      }catch(_){}
-      deferredPrompt = null;
-      return;
+      try{ deferredPrompt.prompt(); await deferredPrompt.userChoice; }catch(_){}
+      deferredPrompt=null; return;
     }
-
     if (navigator.share){
       try{
-        await navigator.share({
-          title: document.title || (cfg.meta?.appName || 'Mi App'),
-          text: cfg.pwa?.install?.shareText || 'Instala la app en tu pantalla de inicio',
-          url: location.href
-        });
+        await navigator.share({ title: document.title || (cfg.meta?.appName || 'Mi App'),
+          text: cfg.pwa?.install?.shareText || 'Instala la app en tu pantalla de inicio', url: location.href });
       }catch(_){}
       return;
     }
-
     alert(
       cfg.pwa?.install?.fallbackTutorial ||
-      'En tu navegador: abre el menú y elige "Agregar a la pantalla de inicio".'
+      (isIOS
+        ? 'Paso 1: Presiona “Compartir”\nPaso 2: “Agregar a Inicio”\nPaso 3: “Agregar”'
+        : 'En tu navegador: menú → “Agregar a la pantalla de inicio”.'
+      )
     );
   });
-
   window.addEventListener('appinstalled', ()=>{ btn.style.display='none'; });
 })();
 
@@ -997,7 +966,7 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
 
   // Arranque
   updateBadge();
-})(); 
+})();
 /* ───────── Extra: auto-link en notificaciones ───────── */
 (function(){
   if(!window.__CFG_ALLOWED) return;
@@ -1039,4 +1008,4 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
       orig(payload);
     };
   })(window.renderNotifView);
-})();// ← importante punto y coma final
+})(); // ← importante punto y coma final
