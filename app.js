@@ -78,17 +78,15 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
     nav.appendChild(el('a',{href:l.href||'#',textContent:l.label||l.id||'Link',className:'navlink'}));
   });
 
-  // notif + install
+  // 🔔 notif + install
   const nb = el('a',{
     id: cfg.nav?.notifButton?.id || 'btn-notifs',
     className: 'navlink',
     href: '#',
-    textContent: cfg.nav?.notifButton?.labels?.default || 'NOTIFICACIONES'
+    textContent: '🔔 Notificaciones'
   });
-  const isStandaloneNow =
-    (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
-    (window.navigator.standalone === true);
-  nb.style.display = isStandaloneNow ? '' : 'none';
+  // 👉 Mostrar SIEMPRE la campana (no dependas de standalone)
+  nb.style.display = '';
 
   const ibCfg = cfg.nav?.installButton;
   const ib = el('a',{id:ibCfg?.id||'btn-install',className:'navlink',href:'#',textContent:ibCfg?.label||'Descargar Web'});
@@ -120,9 +118,14 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
   const h1=el('h1'); h1.style.cssText='font-size:1.35em;line-height:1.25;font-weight:700;color:#fff;text-align:center;margin:10px 0 14px';
   h1.textContent = "Primera Iglesia Pentecostal de Jesucristo de Maunabo, P.R. Inc.";
 
-  const promosWrap = el('section',{id:'promos',className:'promos-wrap',style:'display:none'});
-  promosWrap.innerHTML = `<div id="promoGrid" class="promo-grid"></div>
-  <div class="promo-actions"><button id="btn-descargar-todo" class="promo-dl">${cfg.promos?.grid?.downloadAllLabel||'⬆️DESCARGAR PROMOS⬆️'}</button></div>`;
+  // ✅ Reutiliza el #promos del HTML (no crear uno nuevo con id duplicado)
+  const promosWrap = $('#promos');
+  if (promosWrap){
+    promosWrap.className = 'promos-wrap';
+    promosWrap.style.display = 'none';
+    promosWrap.innerHTML = `<div id="promoGrid" class="promo-grid"></div>
+    <div class="promo-actions"><button id="btn-descargar-todo" class="promo-dl">${cfg.promos?.grid?.downloadAllLabel||'⬆️DESCARGAR PROMOS⬆️'}</button></div>`;
+  }
 
   const card=el('div'); card.className='card'; card.style.marginBottom='12px';
   const ifr=el('iframe',{src:cfg.calendars?.google?.embedUrl||'',title:'Calendario Google',loading:'lazy',referrerPolicy:'no-referrer-when-downgrade',height:'600'});
@@ -136,17 +139,18 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
   );
 
   const modal = el('div',{id:'gcal-choice',className:'contact-modal'});
+  // 👇 corregido className -> class
   modal.innerHTML = `<div class="modal-content">
     <h3 style="margin:0 0 10px">¿Cómo quieres abrirlo?</h3>
     <a id="gcal-open-web" class="btn btn-g" href="#">🌐 Abrir en la web</a>
     <button id="gcal-open-app" class="btn-d">📱 Abrir en la app</button>
-    <button id="gcal-cancel" className="btn-d" style="background:#6b7280">Cancelar</button>
+    <button id="gcal-cancel" class="btn-d" style="background:#6b7280">Cancelar</button>
   </div>`;
 
   const note = el('p'); note.className='card note'; note.style.marginTop='12px';
   note.textContent='📌 Todo cambio en la programación de la iglesia se reflejará automáticamente en tu calendario.';
 
-  sec.innerHTML=''; sec.append(h1, promosWrap, card, grid, modal, note);
+  sec.innerHTML=''; sec.append(h1, card, grid, modal, note);
 
   // botones (igual a tu HTML)
   (function(){
@@ -291,6 +295,7 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
       }
 
       const cultos = $('#ubicacion-cultos');
+      if(!cultos) return;
       cultos.innerHTML = `
         <h2>Ubicación de cultos evangelísticos</h2>
         <div class="card">
@@ -429,7 +434,7 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
   const cfg = window.APP_CONFIG;
   const btn = $('#'+(cfg.pwa?.install?.buttonId||'btn-install')); if(!btn) return;
 
-  // Mostrar SOLO en navegador (no en PWA instalada)
+  // Ocultar si ya está instalada
   const isStandalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || (window.navigator.standalone===true);
   if(isStandalone){ btn.style.display='none'; return; }
 
@@ -446,11 +451,10 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
     btn.disabled = false;
   });
 
-  // Click del botón: en Android usa el prompt nativo; en iOS/otros usa Web Share si existe; si no, muestra instrucciones
+  // Click del botón
   btn.addEventListener('click', async (ev)=>{
     ev.preventDefault();
 
-    // ANDROID: usa el prompt nativo cuando está disponible
     if (isAndroid && deferredPrompt){
       try{
         deferredPrompt.prompt();
@@ -460,7 +464,6 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
       return;
     }
 
-    // iOS / Web Share
     if (navigator.share){
       try{
         await navigator.share({
@@ -472,7 +475,6 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
       return;
     }
 
-    // Fallback
     alert(
       cfg.pwa?.install?.fallbackTutorial ||
       (isIOS
@@ -485,7 +487,7 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
   window.addEventListener('appinstalled', ()=>{ btn.style.display='none'; });
 })();
 
-/* ───────── Firebase + notifs (permisos/token UI, sin abrir hoja por clic) ───────── */
+/* ───────── Firebase + notifs (UI permisos/token; campana siempre visible) ───────── */
 (function(){
   if(!window.__CFG_ALLOWED) return;
   const cfg=window.APP_CONFIG; if(!cfg.firebase?.app) return;
@@ -578,11 +580,7 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
   const nb = $('#'+(cfg.nav?.notifButton?.id||'btn-notifs'));
   if (!nb) return;
 
-  const isStandalone =
-    (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
-    (window.navigator.standalone === true);
-
-  if (!isStandalone) { nb.style.display = 'none'; return; }
+  // 👉 Mostrar SIEMPRE el botón
   nb.style.display = ''; nb.style.pointerEvents = 'auto';
 
   async function setState(){
@@ -608,27 +606,10 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
   setState();
 
   nb.addEventListener('click', async (e)=>{
+    // Nota: el click ahora abre/cierra la bandeja; permisos se piden la primera vez que pulsas si no están dados (ver módulo bandeja).
+    // Aquí solo mantenemos el texto/estado si decides reutilizar el botón para permisos.
     e.preventDefault();
-    if (typeof Notification === 'undefined'){
-      alert('Este dispositivo no soporta notificaciones.');
-      return;
-    }
-    nb.classList.add('loading');
-    nb.textContent = '⏳ NOTIFICACIONES';
-    try{
-      const perm = (Notification.permission === 'granted') ? 'granted' : await Notification.requestPermission();
-      if (perm === 'granted') await obtenerToken();
-      await setState();
-    } finally { nb.classList.remove('loading'); }
   });
-
-  if (window.matchMedia) {
-    const mq = window.matchMedia('(display-mode: standalone)');
-    mq.addEventListener?.('change', () => {
-      const st = mq.matches || (window.navigator.standalone === true);
-      nb.style.display = st ? '' : 'none';
-    });
-  }
 })();
 
 /* ───────── Logo giratorio ───────── */
@@ -663,7 +644,7 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
     return normalizePayload(raw);
   }
 
-  // Acepta DD/MM/AAAA o YYYY-MM-DD → devuelve YYYYMMDD (para embed)
+  // Acepta DD/MM/AAAA o YYYY-MM-DD → devuelve YYYYMMDD
   function toEmbedDate(s){
     if (!s) return null;
     const a = s.trim();
@@ -873,8 +854,11 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
   function openPanel(){ render(); panel.style.display='block'; }
   function closePanel(){ panel.style.display='none'; }
 
-  // Click en la campanita: abrir/cerrar panel (no gestiona permisos/token)
-  btn.addEventListener('click', (e)=>{ e.preventDefault(); panel.style.display==='block'?closePanel():openPanel(); });
+  // Click en la campanita: abrir/cerrar panel
+  const btn = document.getElementById((cfg.nav?.notifButton?.id) || 'btn-notifs');
+  if (btn) {
+    btn.addEventListener('click', (e)=>{ e.preventDefault(); panel.style.display==='block'?closePanel():openPanel(); });
+  }
 
   // Acciones del panel
   panel.addEventListener('click', (e)=>{
