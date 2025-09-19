@@ -488,7 +488,8 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
     if (isIOS) {
       alert(
         "📲 Para instalar la app en tu iPhone/iPad:\n\n" +
-        "Paso 1. Tocar los 3 puntos abajo derecha o arriba derecha.\n\n" +
+        "Paso 1. Tocar los 3 puntos abajo derecha o arriba.\n\n" +
+        "(De no tener los 3 puntos [...]presiona boton compartir en la parte inferior cuadro con [flecha hacia arriba])
         "Paso 2. Presionar \"Compartir\".\n\n" +
         "Paso 3. Deslizar hacia abajo y presionar \"Agregar a Inicio\".\n\n" +
         "Paso 4. Presionar arriba derecha \"Agregar\" (botón azul)."
