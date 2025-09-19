@@ -21,9 +21,9 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
 })();
 
 /* ───────── Theme/Meta/Loader ───────── */
+/* ⚠️ Importante: este bloque NO usa el guard para que el loader siempre se quite */
 (function(){
-  if(!window.__CFG_ALLOWED) return;
-  const cfg = window.APP_CONFIG;
+  const cfg = window.APP_CONFIG || {};
 
   // Title + theme-color
   if(cfg.meta?.appName) document.title = cfg.meta.appName;
@@ -85,7 +85,7 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
     href: '#',
     textContent: '🔔 Notificaciones'
   });
-  // 👉 Mostrar SIEMPRE la campana (no dependas de standalone)
+  // 👉 Mostrar SIEMPRE la campana
   nb.style.display = '';
 
   const ibCfg = cfg.nav?.installButton;
@@ -118,7 +118,7 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
   const h1=el('h1'); h1.style.cssText='font-size:1.35em;line-height:1.25;font-weight:700;color:#fff;text-align:center;margin:10px 0 14px';
   h1.textContent = "Primera Iglesia Pentecostal de Jesucristo de Maunabo, P.R. Inc.";
 
-  // ✅ Reutiliza el #promos del HTML (no crear uno nuevo con id duplicado)
+  // ✅ Reutiliza el #promos del HTML
   const promosWrap = $('#promos');
   if (promosWrap){
     promosWrap.className = 'promos-wrap';
@@ -139,7 +139,6 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
   );
 
   const modal = el('div',{id:'gcal-choice',className:'contact-modal'});
-  // 👇 corregido className -> class
   modal.innerHTML = `<div class="modal-content">
     <h3 style="margin:0 0 10px">¿Cómo quieres abrirlo?</h3>
     <a id="gcal-open-web" class="btn btn-g" href="#">🌐 Abrir en la web</a>
@@ -152,7 +151,7 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
 
   sec.innerHTML=''; sec.append(h1, card, grid, modal, note);
 
-  // botones (igual a tu HTML)
+  // botones
   (function(){
     const isIOS=/iPhone|iPad|iPod/i.test(navigator.userAgent);
     const isAndroid=/Android/i.test(navigator.userAgent);
@@ -605,11 +604,8 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
   }
   setState();
 
-  nb.addEventListener('click', async (e)=>{
-    // Nota: el click ahora abre/cierra la bandeja; permisos se piden la primera vez que pulsas si no están dados (ver módulo bandeja).
-    // Aquí solo mantenemos el texto/estado si decides reutilizar el botón para permisos.
-    e.preventDefault();
-  });
+  // El click lo maneja el módulo de bandeja (abrir/cerrar panel)
+  nb.addEventListener('click', (e)=>{ e.preventDefault(); });
 })();
 
 /* ───────── Logo giratorio ───────── */
@@ -644,7 +640,7 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
     return normalizePayload(raw);
   }
 
-  // Acepta DD/MM/AAAA o YYYY-MM-DD → devuelve YYYYMMDD
+  // Acepta DD/MM/AAAA o YYYY-MM-DD → YYYYMMDD
   function toEmbedDate(s){
     if (!s) return null;
     const a = s.trim();
@@ -895,7 +891,7 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
   document.getElementById('notif-markall')?.addEventListener('click', ()=>{ save(markAllRead()); render(); updateBadge(); });
   document.getElementById('notif-closep')?.addEventListener('click', closePanel);
 
-  // Mensajes del SW: guardar nuevas y marcar leídas cuando se “abre” desde la noti del sistema
+  // Mensajes del SW: guardar nuevas y marcar leídas cuando se abre desde la noti del sistema
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.addEventListener('message', (ev)=>{
       const d = ev.data || {};
