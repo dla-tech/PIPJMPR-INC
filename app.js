@@ -351,33 +351,71 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
 /* ───────── YouTube live ───────── */
 (function(){
   if(!window.__CFG_ALLOWED) return;
-  const cfg=window.APP_CONFIG;
+  const cfg = window.APP_CONFIG;
   const sec = $('#redes'); if(!sec) return;
-  const h2=el('h2',{textContent:'Redes sociales'});
-  const card=el('div'); card.className='card';
-  const box=el('div'); box.className='grid cols-1';
-  const btn=el('a',{className:'btn btn-yt',href:`https://youtube.com/${(cfg.youtube?.handle||'@pipjm9752')}`,target:'_blank',rel:'noopener',textContent:'▶️ YouTube'});
-  const liveWrap=el('div',{id:'live-wrap',className:'live-wrap'});
-  liveWrap.innerHTML=`<div class="live-head"><span class="live-dot"></span> EN VIVO AHORA</div>
-  <div class="live-player" id="live-player"></div>
-  <a id="live-cta" class="live-cta" href="#" target="_blank" rel="noopener">Ver en YouTube</a>`;
-  const mail=el('a',{className:'btn btn-d',href:'mailto:pipjm1@gmail.com',textContent:'✉️ pipjm1@gmail.com'});
-  box.append(btn, liveWrap, mail); card.appendChild(box); sec.innerHTML=''; sec.append(h2,card);
 
-  const handle = cfg.youtube?.handle || '@pipjm9752';
+  // Título de sección
+  const h2 = el('h2',{textContent:'Redes sociales'});
+  const card = el('div'); card.className='card';
+  const box  = el('div'); box.className='grid cols-1';
+
+  // Botón YouTube
+  const btn = el('a',{
+    className:'btn btn-yt',
+    href:`https://youtube.com/${(cfg.youtube?.handle||'@pipjm9752')}`,
+    target:'_blank', rel:'noopener',
+    textContent:'▶️ YouTube'
+  });
+
+  // Contenedor Live
+  const liveWrap = el('div',{id:'live-wrap',className:'live-wrap'});
+  liveWrap.innerHTML = `
+    <div class="live-head"><span class="live-dot"></span> EN VIVO AHORA</div>
+    <div class="live-player" id="live-player"></div>
+    <a id="live-cta" class="live-cta" href="#" target="_blank" rel="noopener">Ver en YouTube</a>
+  `;
+
+  // Correo
+  const mail = el('a',{
+    className:'btn btn-d',
+    href:'mailto:pipjm1@gmail.com',
+    textContent:'✉️ pipjm1@gmail.com'
+  });
+
+  // Montar estructura
+  box.append(btn, liveWrap, mail);
+  card.appendChild(box);
+  sec.innerHTML=''; 
+  sec.append(h2,card);
+
+  // Configurar enlaces/live
+  const handle  = cfg.youtube?.handle || '@pipjm9752';
   const liveUrl = `https://www.youtube.com/${handle.replace(/^@/,'@')}/live`;
   $('#live-cta').href = liveUrl;
-  const oembed = `https://www.youtube.com/oembed?url=${encodeURIComponent(liveUrl)}&format=json`;
-  fetch(oembed,{mode:'cors'})
-    .then(r=>{ if(!r.ok) throw new Error('offline'); return r.json(); })
-    .then(()=>{
-      $('#live-wrap').style.display='block';
-      if(cfg.youtube?.channelId){
-        const src=`https://www.youtube.com/embed/live_stream?channel=${encodeURIComponent(cfg.youtube.channelId)}&autoplay=1&mute=1&rel=0&modestbranding=1`;
-        $('#live-player').innerHTML=`<iframe src="${src}" title="YouTube live" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>`;
-      }else $('#live-player').innerHTML='';
-    })
-    .catch(()=>{ const lw=$('#live-wrap'); if(lw) lw.style.display='none'; });
+
+  if (cfg.youtube?.channelId) {
+    // Mostrar bloque y embeber directamente el player
+    liveWrap.style.display = 'block';
+    const src = `https://www.youtube.com/embed/live_stream?channel=${encodeURIComponent(cfg.youtube.channelId)}&autoplay=1&mute=1&rel=0&modestbranding=1`;
+    $('#live-player').innerHTML = `
+      <iframe src="${src}" 
+              title="YouTube live" 
+              allow="autoplay; encrypted-media; picture-in-picture" 
+              allowfullscreen></iframe>`;
+
+    // Fallback si el iframe no carga en ~4s
+    setTimeout(() => {
+      const ifr = $('#live-player iframe');
+      if (!ifr || !ifr.contentWindow) {
+        liveWrap.style.display = 'block'; // deja visible el CTA aunque no cargue el iframe
+      }
+    }, 4000);
+
+  } else {
+    // Sin channelId: muestra solo el CTA
+    liveWrap.style.display = 'block';
+    $('#live-player').innerHTML = '';
+  }
 })();
 
 /* ───────── Promos (JSON) ───────── */
