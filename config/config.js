@@ -126,7 +126,7 @@ window.APP_CONFIG = {
   /* ───────── YouTube Live ───────── */
   youtube: {
     handle: "@pipjm9752",
-    channelId: "" // opcional
+    channelId: "UCIecC8LfuWsK82SnPIjbqGQ" // opcional
   },
 
   /* ───────── PWA / install copy ───────── */
