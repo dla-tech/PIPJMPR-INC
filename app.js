@@ -1078,3 +1078,42 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
     };
   })(window.renderNotifView);
 })(); // ← importante punto y coma final
+// Extrae fecha y link desde el body si no vinieron por query
+function extractFromBody(txt){
+  const out = { ymd:null, link:null, image:null };
+
+  if (!txt) return out;
+
+  // 1) Fecha YYYY-MM-DD o DD/MM/YYYY
+  //    - Prioriza YYYY-MM-DD si aparece
+  let m = txt.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
+  if (m) {
+    out.ymd = `${m[1]}${m[2]}${m[3]}`;
+  } else {
+    m = txt.match(/\b(\d{2})\/(\d{2})\/(\d{4})\b/);
+    if (m) out.ymd = `${m[3]}${m[2]}${m[1]}`;
+  }
+
+  // 2) Link (primera URL http/https “limpia”)
+  const linkMatch = txt.match(/https?:\/\/[^\s)]+/);
+  if (linkMatch) {
+    // Quita puntuación final común
+    out.link = linkMatch[0].replace(/[),.;!]+$/,'');
+  }
+
+  // 3) #img(https://...)
+  const imgMatch = txt.match(/#img\((https?:\/\/[^)]+)\)/i);
+  if (imgMatch) out.image = imgMatch[1];
+
+  // 4) #link(https://...) tiene prioridad sobre la URL encontrada libre
+  const linkTag = txt.match(/#link\((https?:\/\/[^)]+)\)/i);
+  if (linkTag) out.link = linkTag[1];
+
+  return out;
+}
+
+// Limpia del body los tags #img(...) y #link(...) al mostrar
+function cleanBodyForDisplay(txt){
+  if (!txt) return '';
+  return txt.replace(/#img\([^)]+\)/gi,'').replace(/#link\([^)]+\)/gi,'').trim();
+}
