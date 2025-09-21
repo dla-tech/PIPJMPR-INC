@@ -45,14 +45,17 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
       img.style.objectPosition=L.objectPosition||'50% 45%';
       loader.appendChild(img);
     }
-    const MIN = +L.minVisibleMs||5500, FADE=+L.fadeMs||9000, HARD=(+L.hardFallbackMs||MIN+FADE+2500);
-    const start=performance.now();
-    const done=()=>{
-      document.documentElement.classList.remove('loading');
-      loader.classList.add('hide');
-      $('#preload-style')?.remove();
-      setTimeout(()=>{ try{ loader.remove(); }catch(_){ } }, FADE+100);
-    };
+    const MIN  = +L.minVisibleMs || 5000;  // mínimo 5s visible
+const FADE = +L.fadeMs       || 1500;  // fade/desvanecido 1.5s
+const HARD = (+L.hardFallbackMs || MIN + FADE + 2000); // 8.5s máximo
+
+const start = performance.now();
+const done = ()=>{
+  document.documentElement.classList.remove('loading');
+  loader.classList.add('hide');
+  $('#preload-style')?.remove();
+  setTimeout(()=>{ try{ loader.remove(); }catch(_){ } }, FADE+100);
+};
     window.addEventListener('load', ()=>{
       const wait=Math.max(0, MIN - (performance.now()-start));
       setTimeout(done, wait);
