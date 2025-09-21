@@ -45,7 +45,7 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
       img.style.objectPosition=L.objectPosition||'50% 45%';
       loader.appendChild(img);
     }
-    const MIN = +L.minVisibleMs||1500, FADE=+L.fadeMs||2000, HARD=(+L.hardFallbackMs||MIN+FADE+1500);
+    const MIN = +L.minVisibleMs||2500, FADE=+L.fadeMs||3000, HARD=(+L.hardFallbackMs||MIN+FADE+2500);
     const start=performance.now();
     const done=()=>{
       document.documentElement.classList.remove('loading');
