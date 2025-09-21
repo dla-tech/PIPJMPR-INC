@@ -20,7 +20,7 @@ body::after{content:"";position:fixed;inset:0;background:var(--overlay);z-index:
 
 /* Loader */
 .loading,.loading body{overflow:hidden;height:100%}
-#loader{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:transparent;z-index:100000;opacity:1;transition:opacity 2000ms ease}
+#loader{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:transparent;z-index:100000;opacity:1;transition:opacity 7000ms ease}
 #loader img{position:absolute;inset:0;width:100vw;height:100vh;object-fit:cover;object-position:50% 45%;z-index:1;user-select:none;-webkit-user-drag:none}
 #loader.hide{opacity:0;pointer-events:none}
 
