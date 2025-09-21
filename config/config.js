@@ -49,8 +49,8 @@ window.APP_CONFIG = {
     image: "https://raw.githubusercontent.com/dla-tech/Media-privada/refs/heads/main/IMG_8023.jpeg",
     objectFit: "cover",
     objectPosition: "50% 45%",
-    minVisibleMs: 1500,
-    fadeMs: 2000,
+    minVisibleMs: 3500,
+    fadeMs: 4000,
     hardFallbackMs: 1500 + 2000 + 1500,
     text: { enabled: false }
   },
