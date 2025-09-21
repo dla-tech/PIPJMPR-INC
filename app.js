@@ -46,7 +46,7 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
       loader.appendChild(img);
     }
     const MIN  = +L.minVisibleMs || 5000;  // mínimo 5s visible
-const FADE = +L.fadeMs       || 1500;  // fade/desvanecido 1.5s
+const FADE = +L.fadeMs       || 3500;  // fade/desvanecido 3.5s
 const HARD = (+L.hardFallbackMs || MIN + FADE + 2000); // 8.5s máximo
 
 const start = performance.now();
