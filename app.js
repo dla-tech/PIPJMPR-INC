@@ -57,7 +57,7 @@ const done = ()=>{
   setTimeout(()=>{ try{ loader.remove(); }catch(_){ } }, FADE+100);
 };
     window.addEventListener('load', ()=>{
-      const wait=Math.max(0, MIN - (performance.now()-start));
+      const wait=Math.max(0.5, MIN - (performance.now()-start));
       setTimeout(done, wait);
     }, {once:true});
     setTimeout(done, HARD);
