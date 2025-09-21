@@ -45,9 +45,9 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
       img.style.objectPosition=L.objectPosition||'50% 45%';
       loader.appendChild(img);
     }
-    const MIN  = +L.minVisibleMs || 5000;  // mínimo 5s visible
-const FADE = +L.fadeMs       || 3500;  // fade/desvanecido 3.5s
-const HARD = (+L.hardFallbackMs || MIN + FADE + 2000); // 8.5s máximo
+    const MIN  = +L.minVisibleMs || 9000;  // mínimo 5s visible
+const FADE = +L.fadeMs       || 5500;  // fade/desvanecido 3.5s
+const HARD = (+L.hardFallbackMs || MIN + FADE + 5000); // 8.5s máximo
 
 const start = performance.now();
 const done = ()=>{
