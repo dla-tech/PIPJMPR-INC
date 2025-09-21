@@ -1,3 +1,4 @@
+
 /* app.js */
 
 const $  = (s,r=document)=>r.querySelector(s);
@@ -18,6 +19,67 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
     bar.style.cssText='position:fixed;top:0;left:0;right:0;z-index:999999;padding:8px 12px;background:#b91c1c;color:#fff;font:600 13px system-ui;text-align:center';
     document.addEventListener('DOMContentLoaded',()=>document.body.appendChild(bar));
   }
+})();
+
+/* ───────── HOTFIX: loader suave si el index lo mata ───────── */
+(function(){
+  if(!window.__CFG_ALLOWED) return;
+  const cfg = window.APP_CONFIG||{};
+  const L   = cfg.loader||{};
+
+  // Si el index ya quitó la clase 'loading' o borró el <style id="preload-style">,
+  // entonces activamos un loader alterno (#loader2) SIN tocar index.html
+  const killerRan = !document.documentElement.classList.contains('loading') ||
+                    !document.getElementById('preload-style');
+  if (!killerRan) return; // si el loader original sigue vivo, no hacemos nada
+
+  // Style suave: oculta todo menos #loader2
+  let s = document.getElementById('preload-style-soft');
+  if(!s){
+    s = document.createElement('style');
+    s.id = 'preload-style-soft';
+    s.textContent = 'body > *:not(#loader2){visibility:hidden}';
+    document.head.appendChild(s);
+  }
+  document.documentElement.classList.add('loading');
+
+  // Crear overlay #loader2 (copia visual del loader original)
+  let ld = document.getElementById('loader2');
+  if(!ld){
+    ld = document.createElement('div');
+    ld.id = 'loader2';
+    ld.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:transparent;z-index:100001;opacity:1;transition:opacity '+(+L.fadeMs||800)+'ms ease';
+    if (L.image){
+      const img = document.createElement('img');
+      img.src = L.image;
+      img.alt = 'Cargando';
+      img.style.cssText = 'position:absolute;inset:0;width:100vw;height:100vh;object-fit:'+(L.objectFit||'cover')+';object-position:'+(L.objectPosition||'50% 45%');
+      ld.appendChild(img);
+    }
+    document.body.appendChild(ld);
+  }
+
+  // Tiempos tomados del config (loader)
+  const MIN  = +L.minVisibleMs || 5000;         // mínimo visible
+  const FADE = +L.fadeMs       || 800;          // desvanecido
+  const HARD = (+L.hardFallbackMs || MIN+FADE+1500); // tope duro
+  const start = performance.now();
+
+  function done2(){
+    document.documentElement.classList.remove('loading');
+    ld.style.opacity = '0';
+    setTimeout(()=>{ try{ ld.remove(); }catch(_){ } }, FADE+100);
+    document.getElementById('preload-style-soft')?.remove();
+  }
+
+  // Cierra cuando la página cargue + MIN visible
+  window.addEventListener('load', ()=>{
+    const wait = Math.max(0, MIN - (performance.now()-start));
+    setTimeout(done2, wait);
+  }, {once:true});
+
+  // Failsafe para no quedarse pegado
+  setTimeout(done2, HARD);
 })();
 
 /* ───────── Theme/Meta/Loader ───────── */
