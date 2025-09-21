@@ -35,60 +35,35 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
   if(cfg.layout?.pageBackground?.overlay) cssv('--overlay', cfg.layout.pageBackground.overlay);
 
   // Loader
-  // Loader (resiste al failsafe del index)
-const L = cfg.loader || {};
-let loader = document.getElementById('loader');
-
-// Si el failsafe lo quitó, lo volvemos a crear
-if (!loader) {
-  loader = el('div', { id: 'loader', ariaLabel: 'Pantalla de carga' });
-  document.body.prepend(loader);
-}
-
-// Forzamos a visible y por encima de todo
-loader.classList.remove('hide');
-loader.style.cssText = `
-  position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
-  background:transparent;z-index:100000;opacity:1;
-  transition:opacity ${(+L.fadeMs||8000)}ms ease
-`;
-
-// Imagen del loader
-loader.innerHTML = '';
-if (L.image) {
-  const img = el('img', { src: L.image, alt: 'Pantalla de carga' });
-  img.style.objectFit = L.objectFit || 'cover';
-  img.style.objectPosition = L.objectPosition || '50% 45%';
-  img.style.cssText += ';position:absolute;inset:0;width:100vw;height:100vh;user-select:none;-webkit-user-drag:none';
-  loader.appendChild(img);
-}
-
-// Tiempos desde config (con defaults)
-const MIN  = +L.minVisibleMs   || 8000;  // mínimo visible
-const FADE = +L.fadeMs         || 8000;  // duración del desvanecido
-const HARD = +L.hardFallbackMs || (MIN + FADE + 8000); // máximo absoluto
+const L = cfg.loader||{};
+  const loader = $('#loader');
+  if(loader){
+    loader.innerHTML='';
+    if (L.image){
+      const img=el('img',{src:L.image,alt:'Pantalla de carga'});
+      img.style.objectFit=L.objectFit||'cover';
+      img.style.objectPosition=L.objectPosition||'50% 45%';
+      loader.appendChild(img);
+    }
+    const MIN  = +L.minVisibleMs || 8000;  // mínimo 5s visible
+const FADE = +L.fadeMs       || 7500;  // fade/desvanecido 3.5s
+const HARD = (+L.hardFallbackMs || MIN + FADE + 7500); // 8.5s máximo
 
 const start = performance.now();
-
-// Apagar loader
 const done = ()=>{
-  try { window.__APP_LOADER_DONE = true; } catch(_) {}
+  document.documentElement.classList.remove('loading');
   loader.classList.add('hide');
-  // Si el preload-style fue retirado por el failsafe, no pasa nada:
-  // el overlay cubre la UI hasta completar el fade.
-  setTimeout(()=>{ try{ loader.remove(); }catch(_){ } }, FADE + 120);
+  $('#preload-style')?.remove();
+  setTimeout(()=>{ try{ loader.remove(); }catch(_){ } }, FADE+100);
 };
-
-// Espera al onload pero respetando el mínimo visible
-window.addEventListener('load', ()=>{
-  const wait = Math.max(0, MIN - (performance.now() - start));
-  setTimeout(done, wait);
-}, { once:true });
-
-// “Paracaídas” propio (por si onload no ocurre)
-setTimeout(done, HARD);
-
-/* ───────── Header/Nav + autohide ───────── */
+    window.addEventListener('load', ()=>{
+      const wait=Math.max(0, MIN - (performance.now()-start));
+      setTimeout(done, wait);
+    }, {once:true});
+    setTimeout(done, HARD);
+  }
+})();
+  /* ───────── Header/Nav + autohide ───────── */
 (function(){
   if(!window.__CFG_ALLOWED) return;
   const cfg = window.APP_CONFIG;
