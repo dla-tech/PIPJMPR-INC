@@ -47,7 +47,7 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
     }
     const MIN  = +L.minVisibleMs || 8000;  // mínimo 5s visible
 const FADE = +L.fadeMs       || 7500;  // fade/desvanecido 3.5s
-const HARD = (+L.hardFallbackMs || MIN + FADE + 9000); // 8.5s máximo
+const HARD = (+L.hardFallbackMs || MIN + FADE + 7500); // 8.5s máximo
 
 const start = performance.now();
 const done = ()=>{
