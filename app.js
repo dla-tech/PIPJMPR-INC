@@ -61,8 +61,8 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
 
   // Tiempos tomados del config (loader)
   const MIN  = +L.minVisibleMs || 5000;         // mínimo visible
-  const FADE = +L.fadeMs       || 800;          // desvanecido
-  const HARD = (+L.hardFallbackMs || MIN+FADE+1500); // tope duro
+  const FADE = +L.fadeMs       || 9000;          // desvanecido
+  const HARD = (+L.hardFallbackMs || MIN+FADE+2000); // tope duro
   const start = performance.now();
 
   function done2(){
