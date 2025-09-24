@@ -109,15 +109,24 @@ window.APP_CONFIG = {
       "webcal://p158-caldav.icloud.com/published/2/MTYyMzg4NDUwMjAxNjIzOFc_RCw-iCOSeM_LMqkWZcQMuX9sTzZF-PyrU9d06Oy4V0VhxUSZVqCmqzUsygyCHgAllfl2DFW34WcFi8EvPD8"
   },
 
-  /* ───────── ICS (martes/miércoles) ───────── */
+    /* ───────── ICS (martes/miércoles) ───────── */
   ics: {
-  // Siempre apunta a la rama MAIN para leer la última versión del .ics
-  url: "https://raw.githubusercontent.com/dla-tech/Media-privada/refs/heads/main/calendarios/calendario.ics",
-  timeZone: "America/Puerto_Rico",
-  labels: { martesPrefix: "Martes", miercolesPrefix: "Miércoles" }
-},
-maps: { defaultTownFallback: "Maunabo, Puerto Rico" }
+    // ⚠️ Usa siempre el enlace RAW de GitHub para que cargue bien
+    url: "https://raw.githubusercontent.com/dla-tech/Media-privada/main/calendarios/calendario.ics",
 
+    // Zona horaria en la que se interpretarán los eventos
+    timeZone: "America/Puerto_Rico",
+
+    // Etiquetas que se muestran en la web
+    labels: {
+      martesPrefix: "Martes",
+      miercolesPrefix: "Miércoles"
+    },
+
+    // Opciones extra para robustez
+    cacheBuster: true,   // si es true, añade un timestamp al URL para evitar caché
+    fallbackTown: "Maunabo, Puerto Rico" // localidad que se usará si no detecta ninguna
+  },
   /* ───────── Promos (JSON externo) ───────── */
   promos: {
     manifestUrl: "https://raw.githubusercontent.com/dla-tech/Media-privada/refs/heads/main/Promo/Promos.json",
