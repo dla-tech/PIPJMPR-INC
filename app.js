@@ -666,15 +666,43 @@ const done = ()=>{
     return w;
   }
 
-  function stepsFor(platform){
-    if (platform==='ios'){
+  // Helper: detectar versión mayor de iOS (18, 26, etc.)
+function getIOSMajorVersion(){
+  const ua = navigator.userAgent || '';
+  const m = ua.match(/OS (\d+)[._]\d+/i); 
+  return m ? parseInt(m[1], 10) : null;
+}
+
+// Pasos de instalación según plataforma y versión
+function stepsFor(platform){
+  if (platform === 'ios') {
+    const v = getIOSMajorVersion();
+    if (v === 18) {
+      // iOS 18 → botón Compartir directo
       return [
-        'Paso 1: Toca los tres puntos o el botón “Compartir”.',
-        'Paso 2: Presiona “Compartir”.',
-        'Paso 3: Desliza hacia abajo y presiona “Agregar a Inicio”.',
-        'Paso 4: Arriba derecha presiona “Agregar” (botón azul).'
+        'Paso 1: Toca el botón <strong>Compartir</strong> (cuadrado con flecha hacia arriba).',
+        'Paso 2: Desliza hacia abajo si es necesario.',
+        'Paso 3: Presiona <strong>“Agregar a Inicio”</strong>.',
+        'Paso 4: Arriba a la derecha presiona <strong>“Agregar”</strong> (botón azul).'
       ];
     }
+    if (v >= 26) {
+      // iOS 26+ → menú de tres puntos primero
+      return [
+        'Paso 1: Toca los <strong>tres puntos</strong> (⋮).',
+        'Paso 2: Presiona <strong>Compartir</strong>.',
+        'Paso 3: Desliza hacia abajo y presiona <strong>“Agregar a Inicio”</strong>.',
+        'Paso 4: Arriba a la derecha presiona <strong>“Agregar”</strong> (botón azul).'
+      ];
+    }
+    // fallback si no reconoce versión → usar pasos estilo iOS 18
+    return [
+      'Paso 1: Toca el botón <strong>Compartir</strong>.',
+      'Paso 2: Desliza hacia abajo.',
+      'Paso 3: Presiona <strong>“Agregar a Inicio”</strong>.',
+      'Paso 4: Presiona <strong>Agregar</strong> arriba a la derecha.'
+    ];
+  }
     // Android (fallback)
     return [
       'Paso 1: Toca el menú ⋮ (arriba derecha).',
