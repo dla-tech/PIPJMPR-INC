@@ -680,19 +680,19 @@ function stepsFor(platform){
     if (v === 18) {
       // iOS 18 → botón Compartir directo
       return [
-        'Paso 1: Toca el botón <strong>Compartir</strong> (cuadrado con flecha hacia arriba).',
-        'Paso 2: Desliza hacia abajo si es necesario.',
-        'Paso 3: Presiona <strong>“Agregar a Inicio”</strong>.',
-        'Paso 4: Arriba a la derecha presiona <strong>“Agregar”</strong> (botón azul).'
+        'Paso 1: Presiona "compartir" <strong>Compartir</strong> (cuadrado con flecha hacia arriba).',
+        'Paso 2: Desliza hacia abajo hasta encontrar "agregar a inicio" .',
+        'Paso 3: Confirma el nombre "PIPJM" <strong>“Agregar a Inicio”</strong>.',
+        'Paso 4: Arriba a la derecha presiona agregar <strong>“Agregar”</strong> (botón azul).'
       ];
     }
     if (v >= 26) {
       // iOS 26+ → menú de tres puntos primero
       return [
-        'Paso 1: Toca los <strong>tres puntos</strong> (⋮).',
-        'Paso 2: Presiona <strong>Compartir</strong>.',
-        'Paso 3: Desliza hacia abajo y presiona <strong>“Agregar a Inicio”</strong>.',
-        'Paso 4: Arriba a la derecha presiona <strong>“Agregar”</strong> (botón azul).'
+        'Paso 1: Toca los tres puntos <strong>tres puntos</strong> (⋮).',
+        'Paso 2: Presiona compartir <strong>Compartir</strong>.',
+        'Paso 3: Desliza hacia abajo y presiona "agregar a inicio" <strong>“Agregar a Inicio”</strong>.',
+        'Paso 4: Arriba a la derecha presiona "agregar" <strong>“Agregar”</strong> (botón azul).'
       ];
     }
     // fallback si no reconoce versión → usar pasos estilo iOS 18
