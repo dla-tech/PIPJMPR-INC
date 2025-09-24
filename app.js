@@ -557,136 +557,208 @@ const done = ()=>{
   })();
 })();
 
-/* === Guía PWA v3: minimizable real + pill pequeña === */
+/* === PWA install — compacto, draggable, con minimizar (Android+iOS) === */
 (function(){
-  const BTN_ID = (window.APP_CONFIG?.pwa?.install?.buttonId)||'btn-install';
-  const btnInstall = document.getElementById(BTN_ID);
-  if(!btnInstall) return;
+  if(!window.__CFG_ALLOWED) return;
+  const cfg = window.APP_CONFIG || {};
+  const btn = document.getElementById((cfg.pwa?.install?.buttonId)||'btn-install');
+  if(!btn) return;
 
-  let deferredPrompt = window.__deferredPrompt || null;
-  window.addEventListener('beforeinstallprompt', (e)=>{
-    e.preventDefault(); deferredPrompt=e; window.__deferredPrompt=e;
-  });
+  // Ocultar si ya está instalada
+  const isStandalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || (window.navigator.standalone===true);
+  if (isStandalone){ btn.style.display='none'; return; }
 
   const isAndroid = /Android/i.test(navigator.userAgent);
   const isIOS     = /iPhone|iPad|iPod/i.test(navigator.userAgent);
 
-  let state = { platform:isIOS?'ios':'android', step:0, steps:[], done:[] };
+  // Captura / reutiliza el beforeinstallprompt
+  let deferredPrompt = window.__deferredPrompt || null;
+  window.addEventListener('beforeinstallprompt', (e)=>{
+    try{ e.preventDefault(); }catch(_){}
+    deferredPrompt = e;
+    window.__deferredPrompt = e;
+    // Asegura visibilidad del botón si el navegador lo soporta
+    btn.style.display = '';
+    btn.disabled = false;
+  });
 
-  function stepsFor(p){
-    return p==='ios'
-      ? [
+  // ───────── UI compacta (widget) ─────────
+  let widget = null;
+  function ensureWidget(){
+    if (widget) return widget;
+    const w = document.createElement('div');
+    w.id = 'pwa-mini-widget';
+    w.style.cssText = `
+      position:fixed; right:14px; bottom:14px; z-index:100000;
+      width: 300px; max-width: 92vw;
+      font: 400 14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Arial;
+      color:#111;
+    `;
+    w.innerHTML = `
+      <div id="pwa-card" style="
+        background:#fff; border:1px solid #e5e7eb; border-radius:12px;
+        box-shadow:0 8px 22px rgba(0,0,0,.18);
+      ">
+        <div id="pwa-head" style="
+          cursor:move; display:flex; align-items:center; gap:8px;
+          padding:8px 10px; border-bottom:1px solid #eef0f2; background:#f9fafb; border-radius:12px 12px 0 0;
+        ">
+          <strong style="font:700 13px system-ui">Instalar app</strong>
+          <span style="margin-left:auto"></span>
+          <button id="pwa-min" title="Minimizar" style="border:0;background:#e5e7eb;border-radius:8px;padding:4px 8px">–</button>
+          <button id="pwa-close" title="Cerrar" style="border:0;background:#e11d48;color:#fff;border-radius:8px;padding:4px 8px">×</button>
+        </div>
+        <div id="pwa-body" style="padding:10px 10px 8px 10px"></div>
+        <div id="pwa-cta" style="display:flex;gap:8px;justify-content:flex-end;padding:8px 10px;border-top:1px solid #eef0f2">
+          <button id="pwa-back"  style="display:none;border:0;background:#e5e7eb;border-radius:8px;padding:6px 10px">Atrás</button>
+          <button id="pwa-next"  style="border:0;background:#111;color:#fff;border-radius:8px;padding:6px 10px">Siguiente</button>
+        </div>
+      </div>
+      <button id="pwa-pill" style="
+        display:none; position:absolute; right:0; bottom:0; transform:translate(0,0);
+        border:1px solid #e5e7eb; background:#fff; border-radius:20px;
+        padding:7px 10px; box-shadow:0 6px 16px rgba(0,0,0,.15); font-weight:600;
+      ">Instalar app ⤴</button>
+    `;
+    document.body.appendChild(w);
+
+    // Drag (card y píldora)
+    function makeDraggable(el, handle){
+      let sx=0, sy=0, ox=0, oy=0, dragging=false;
+      const onDown = (ev)=>{
+        dragging=true;
+        const r = w.getBoundingClientRect();
+        ox = r.right; oy = r.bottom; // anclaje conservador
+        sx = (ev.touches?ev.touches[0].clientX:ev.clientX);
+        sy = (ev.touches?ev.touches[0].clientY:ev.clientY);
+        ev.preventDefault();
+      };
+      const onMove = (ev)=>{
+        if(!dragging) return;
+        const cx = (ev.touches?ev.touches[0].clientX:ev.clientX);
+        const cy = (ev.touches?ev.touches[0].clientY:ev.clientY);
+        const dx = cx - sx, dy = cy - sy;
+        // mover el contenedor w (right/bottom) sin romper layout
+        const nr = Math.max(6, 14 - dx);
+        const nb = Math.max(6, 14 - dy);
+        w.style.right  = nr + 'px';
+        w.style.bottom = nb + 'px';
+      };
+      const onUp = ()=>{ dragging=false; };
+      (handle||el).addEventListener('mousedown',onDown,{passive:false});
+      (handle||el).addEventListener('touchstart',onDown,{passive:false});
+      window.addEventListener('mousemove',onMove,{passive:false});
+      window.addEventListener('touchmove',onMove,{passive:false});
+      window.addEventListener('mouseup',onUp,{passive:true});
+      window.addEventListener('touchend',onUp,{passive:true});
+    }
+    makeDraggable(w, w.querySelector('#pwa-head'));
+    makeDraggable(w.querySelector('#pwa-pill'));
+
+    // Minimizar / Restaurar / Cerrar
+    const card = w.querySelector('#pwa-card');
+    const pill = w.querySelector('#pwa-pill');
+    w.querySelector('#pwa-min').onclick = ()=>{ card.style.display='none'; pill.style.display='inline-block'; };
+    w.querySelector('#pwa-close').onclick= ()=>{ w.style.display='none'; };
+    pill.onclick = ()=>{ pill.style.display='none'; card.style.display='block'; };
+
+    widget = w;
+    return w;
+  }
+
+  function stepsFor(platform){
+    if (platform==='ios'){
+      return [
         'Paso 1: Toca los tres puntos o el botón “Compartir”.',
         'Paso 2: Presiona “Compartir”.',
-        'Paso 3: Desliza y toca “Agregar a Inicio”.',
-        'Paso 4: Arriba derecha, toca “Agregar” (botón azul).'
-      ]
-      : [
-        'Paso 1: Toca el menú ⋮ (arriba derecha).',
-        'Paso 2: “Agregar a la pantalla de inicio”.',
-        'Paso 3: Confirma en el diálogo.',
-        'Listo: La app queda en tu pantalla.'
+        'Paso 3: Desliza hacia abajo y presiona “Agregar a Inicio”.',
+        'Paso 4: Arriba derecha presiona “Agregar” (botón azul).'
       ];
-  }
-
-  function makeDraggable(el){
-    let sx,sy,sl,st,drag=false;
-    el.addEventListener('mousedown',start); el.addEventListener('touchstart',start,{passive:false});
-    function start(ev){
-      const p=('touches'in ev)?ev.touches[0]:ev;
-      drag=true; sx=p.clientX; sy=p.clientY;
-      const r=el.getBoundingClientRect(); sl=r.left; st=r.top;
-      document.addEventListener('mousemove',move); document.addEventListener('touchmove',move,{passive:false});
-      document.addEventListener('mouseup',end,{once:true}); document.addEventListener('touchend',end,{once:true});
-      ev.preventDefault?.();
     }
-    function move(ev){
-      if(!drag)return;
-      const p=('touches'in ev)?ev.touches[0]:ev;
-      el.style.left=(sl+(p.clientX-sx))+'px';
-      el.style.top =(st+(p.clientY-sy))+'px';
-      el.style.right='auto'; el.style.bottom='auto';
+    // Android (fallback)
+    return [
+      'Paso 1: Toca el menú ⋮ (arriba derecha).',
+      'Paso 2: Presiona “Agregar a la pantalla de inicio”.',
+      'Paso 3: Confirma en el diálogo.',
+      'Listo: La app quedará en tu pantalla de inicio.'
+    ];
+  }
+
+  // Render de guía compacta (sin overlay, con “Siguiente”)
+  function openGuide(platform){
+    const w = ensureWidget();
+    w.style.display = 'block';
+    const body = w.querySelector('#pwa-body');
+    const back = w.querySelector('#pwa-back');
+    const next = w.querySelector('#pwa-next');
+
+    const steps = stepsFor(platform);
+    let idx = 0;
+    const done = steps.map(()=>false);
+
+    function paint(){
+      body.innerHTML = `
+        <ol style="margin:0;padding-left:18px">
+          ${steps.map((s,i)=>{
+            const ok = done[i], active = (i===idx);
+            const color = ok ? '#059669' : active ? '#111' : '#6b7280';
+            const icon = ok ? '✔︎ ' : '';
+            return `<li style="margin:6px 0;color:${color};${active?'font-weight:700':''}">${icon}${s}</li>`;
+          }).join('')}
+        </ol>
+        ${
+          (platform!=='ios' && deferredPrompt)
+          ? `<div style="margin-top:8px">
+               <button id="pwa-try" style="border:0;background:#2563eb;color:#fff;border-radius:8px;padding:6px 10px">Probar instalar ahora</button>
+             </div>`
+          : ''
+        }
+        <div style="margin-top:6px;color:#6b7280;font-size:12px">Puedes arrastrar este recuadro donde te quede cómodo.</div>
+      `;
+      back.style.display = (idx>0)?'':'none';
+      next.textContent   = (idx<steps.length-1)?'Siguiente':'Listo';
+
+      const tryBtn = body.querySelector('#pwa-try');
+      if (tryBtn){
+        tryBtn.onclick = async ()=>{
+          if (!deferredPrompt) return;
+          try{ deferredPrompt.prompt(); await deferredPrompt.userChoice; }catch(_){}
+          deferredPrompt = null; window.__deferredPrompt = null;
+        };
+      }
     }
-    function end(){drag=false;}
+
+    back.onclick = ()=>{ if(idx>0){ idx--; paint(); } };
+    next.onclick = ()=>{
+      done[idx] = true;
+      if (idx < steps.length-1) { idx++; paint(); }
+      else { w.style.display='none'; }
+    };
+
+    paint();
   }
 
-  function showGuide(){
-    removeUI();
-    state.steps=stepsFor(state.platform);
-    state.done=state.steps.map(()=>false);
-    state.step=0;
-
-    const wrap=document.createElement('div');
-    wrap.id='pwa-guide';
-    wrap.style.cssText='position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;';
-    wrap.innerHTML=`
-      <div id="pwa-card" style="width:min(520px,92vw);background:#fff;border-radius:12px;box-shadow:0 16px 40px rgba(0,0,0,.35);font:15px system-ui;padding:14px;position:relative">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-          <strong style="font:700 16px system-ui">Instalar la app</strong>
-          <div style="display:flex;gap:6px">
-            <button id="pwa-min" style="background:#e5e7eb;border:0;border-radius:6px;padding:4px 8px">–</button>
-            <button id="pwa-close" style="background:#6b7280;color:#fff;border:0;border-radius:6px;padding:4px 8px">×</button>
-          </div>
-        </div>
-        <div id="pwa-body"></div>
-        <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:12px">
-          <button id="pwa-back" style="display:none;background:#e5e7eb;border:0;border-radius:6px;padding:6px 12px">Atrás</button>
-          <button id="pwa-next" style="background:#111;color:#fff;border:0;border-radius:6px;padding:6px 12px">Siguiente</button>
-        </div>
-      </div>`;
-    document.body.appendChild(wrap);
-
-    paintCard();
-    wrap.querySelector('#pwa-next').onclick=()=>{ if(state.step<state.steps.length-1){state.step++;paintCard();} else removeUI(); };
-    wrap.querySelector('#pwa-back').onclick=()=>{ if(state.step>0){state.step--;paintCard();} };
-    wrap.querySelector('#pwa-close').onclick=()=>removeUI();
-    wrap.querySelector('#pwa-min').onclick=()=>{ wrap.remove(); showMini(); };
-  }
-
-  function paintCard(){
-    const body=document.getElementById('pwa-body');
-    const back=document.getElementById('pwa-back');
-    const next=document.getElementById('pwa-next');
-    body.innerHTML=`<ol style="margin:0;padding-left:20px">
-      ${state.steps.map((s,i)=>{
-        const active=(i===state.step), ok=state.done[i];
-        const color=ok?'#059669':active?'#111':'#555';
-        const icon=ok?'✔︎ ':'';
-        return `<li style="margin:6px 0;color:${color};${active?'font-weight:700':''}">${icon}${s}</li>`;
-      }).join('')}
-    </ol>`;
-    back.style.display=state.step>0?'':'none';
-    next.textContent=state.step<state.steps.length-1?'Siguiente':'Listo';
-  }
-
-  function showMini(){
-    removeUI();
-    const mini=document.createElement('div');
-    mini.id='pwa-mini';
-    mini.style.cssText='position:fixed;right:16px;bottom:20px;z-index:100001;background:#111;color:#fff;border-radius:999px;padding:6px 10px;font:13px system-ui;display:flex;gap:6px;align-items:center;cursor:move';
-    mini.innerHTML=`<span id="mini-text">${state.platform==='ios'?'iOS':'Android'} paso ${state.step+1}/${state.steps.length}</span>
-      <button id="mini-open" style="background:#2563eb;color:#fff;border:0;border-radius:999px;padding:4px 8px">?</button>`;
-    document.body.appendChild(mini);
-    makeDraggable(mini);
-    mini.querySelector('#mini-open').onclick=()=>{ mini.remove(); showGuide(); };
-  }
-
-  function removeUI(){
-    document.getElementById('pwa-guide')?.remove();
-    document.getElementById('pwa-mini')?.remove();
-  }
-
-  btnInstall.addEventListener('click', async (e)=>{
+  // Click del botón instalar
+  btn.addEventListener('click', async (e)=>{
     e.preventDefault();
-    const isStandalone=(window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches)||(window.navigator.standalone===true);
-    if(isStandalone) return;
 
-    if(isAndroid && deferredPrompt){
+    // Si ya instalada, no hacemos nada (button debería estar oculto)
+    const isStandaloneNow = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || (window.navigator.standalone===true);
+    if (isStandaloneNow) return;
+
+    // Android con prompt disponible → prompt nativo directo
+    if (isAndroid && deferredPrompt){
       try{ deferredPrompt.prompt(); await deferredPrompt.userChoice; }catch(_){}
-      deferredPrompt=null; window.__deferredPrompt=null; return;
+      deferredPrompt = null; window.__deferredPrompt = null;
+      return;
     }
-    showGuide();
+
+    // iOS o Android sin prompt → guía compacta
+    openGuide(isIOS ? 'ios' : 'android');
   });
+
+  // Si el navegador dispara “appinstalled”, ocultamos el botón
+  window.addEventListener('appinstalled', ()=>{ btn.style.display='none'; });
 })();
 
 /* ───────── Firebase + notifs (permiso/token UI) ───────── */
