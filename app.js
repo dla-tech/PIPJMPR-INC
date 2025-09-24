@@ -693,61 +693,79 @@ const done = ()=>{
     return platform==='ios' ? ios : droid;
   }
 
-  function openGuide(platform){
-    const card   = ensureGuide();
-    const body   = card.querySelector('#pwa-guide-body');
-    const btnNxt = card.querySelector('#pwa-guide-next');
-    const btnBck = card.querySelector('#pwa-guide-back');
-    const btnDon = card.querySelector('#pwa-guide-done');
+  // función openGuide por esta:
+function openGuide(platform){
+  const card   = ensureGuide();
+  const body   = card.querySelector('#pwa-guide-body');
+  const btnNxt = card.querySelector('#pwa-guide-next');
+  const btnBck = card.querySelector('#pwa-guide-back');
+  const btnDon = card.querySelector('#pwa-guide-done');
+  const btnMin = card.querySelector('#pwa-guide-min');
 
-    const steps = stepsFor(platform);
-    let i = 0;
-    const done = steps.map(()=>false); // estado de cada paso
+  // 🔁 Siempre restaurar por si quedó minimizado
+  body.style.display = '';
+  card.querySelector('#pwa-guide-ctrls').style.display = '';
+  if (btnMin) btnMin.textContent = 'Minimizar';
+  card.style.width = 'min(420px,92vw)';
+  card.style.minWidth = '';
+  card.style.zIndex = '100001';
 
-    function paint(){
-      body.innerHTML = `
-        <div style="margin:0 0 8px;color:#6b7280">Guía ${platform==='ios'?'iOS':'Android'}</div>
-        <ol id="pwa-steps" style="margin:0;padding-left:20px">
-          ${steps.map((s,idx)=>{
-            const active = (idx===i);
-            const ok = done[idx];
-            const color = ok ? '#059669' : active ? '#111' : '#374151';
-            const icon  = ok ? '✔︎ ' : '';
-            return `<li data-step="${idx}" style="margin:8px 0;color:${color};${active?'font-weight:700':''}">${icon}${s}</li>`;
-          }).join('')}
-        </ol>
-        ${
-          (platform!=='ios' && deferredPrompt)
-          ? `<div style="margin-top:10px">
-               <button id="pwa-try-prompt" style="background:#2563eb;color:#fff;border:0;border-radius:8px;padding:8px 12px">Probar instalar ahora</button>
-             </div>`
-          : ''
-        }
-        <div style="margin-top:8px;color:#6b7280;font-size:12px">Puedes arrastrar este recuadro para que no tape los menús.</div>
-      `;
-      btnBck.style.display = (i>0) ? '' : 'none';
-      btnNxt.textContent   = (i<steps.length-1) ? 'Siguiente' : 'Listo';
-
-      // Botón de “probar prompt” en Android
-      const tryBtn = body.querySelector('#pwa-try-prompt');
-      if (tryBtn) {
-        tryBtn.onclick = async ()=>{
-          if (!deferredPrompt) return;
-          try{ deferredPrompt.prompt(); await deferredPrompt.userChoice; }catch(_){}
-          deferredPrompt = null;
-          window.__deferredPrompt = null;
-        };
-      }
-    }
-
-    // Acciones
-    btnDon.onclick = ()=>{ done[i]=true; paint(); };
-    btnNxt.onclick = ()=>{ if(i<steps.length-1){ i++; paint(); } else { card.remove(); } };
-    btnBck.onclick = ()=>{ if(i>0){ i--; paint(); } };
-
-    paint();
+  // 🧭 Si quedó fuera de la pantalla, reubica a una posición segura
+  const r = card.getBoundingClientRect();
+  const off =
+    r.right < 20 || r.bottom < 20 ||
+    r.left > (window.innerWidth - 20) ||
+    r.top  > (window.innerHeight - 20);
+  if (off) {
+    card.style.left = '16px';
+    card.style.top  = 'auto';
+    card.style.bottom = '16px';
   }
 
+  const steps = stepsFor(platform);
+  let i = 0;
+  const done = steps.map(()=>false);
+
+  function paint(){
+    body.innerHTML = `
+      <div style="margin:0 0 8px;color:#6b7280">Guía ${platform==='ios'?'iOS':'Android'}</div>
+      <ol id="pwa-steps" style="margin:0;padding-left:20px">
+        ${steps.map((s,idx)=>{
+          const active = (idx===i);
+          const ok = done[idx];
+          const color = ok ? '#059669' : active ? '#111' : '#374151';
+          const icon  = ok ? '✔︎ ' : '';
+          return `<li data-step="${idx}" style="margin:8px 0;color:${color};${active?'font-weight:700':''}">${icon}${s}</li>`;
+        }).join('')}
+      </ol>
+      ${
+        (platform!=='ios' && deferredPrompt)
+        ? `<div style="margin-top:10px">
+             <button id="pwa-try-prompt" style="background:#2563eb;color:#fff;border:0;border-radius:8px;padding:8px 12px">Probar instalar ahora</button>
+           </div>`
+        : ''
+      }
+      <div style="margin-top:8px;color:#6b7280;font-size:12px">Puedes arrastrar este recuadro para que no tape los menús.</div>
+    `;
+    btnBck.style.display = (i>0) ? '' : 'none';
+    btnNxt.textContent   = (i<steps.length-1) ? 'Siguiente' : 'Listo';
+
+    const tryBtn = body.querySelector('#pwa-try-prompt');
+    if (tryBtn) {
+      tryBtn.onclick = async ()=>{
+        if (!deferredPrompt) return;
+        try{ deferredPrompt.prompt(); await deferredPrompt.userChoice; }catch(_){}
+        deferredPrompt = null; window.__deferredPrompt = null;
+      };
+    }
+  }
+
+  btnDon.onclick = ()=>{ done[i]=true; paint(); };
+  btnNxt.onclick = ()=>{ if(i<steps.length-1){ i++; paint(); } else { card.remove(); } };
+  btnBck.onclick = ()=>{ if(i>0){ i--; paint(); } };
+
+  paint();
+}
   // Click del botón “Descargar App”
   btnInstall.addEventListener('click', async (e)=>{
     e.preventDefault();
