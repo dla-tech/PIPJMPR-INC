@@ -557,23 +557,20 @@ const done = ()=>{
   })();
 })();
 
-/* ───────── PWA install ───────── */
+/* ───────── PWA install (guía interactiva anclable) ───────── */
 (function(){
   if(!window.__CFG_ALLOWED) return;
   const cfg = window.APP_CONFIG;
   const btn = $('#'+(cfg.pwa?.install?.buttonId||'btn-install')); if(!btn) return;
 
-  // Ocultar si ya está instalada como PWA
-  const isStandalone =
-    (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
-    (window.navigator.standalone === true);
+  // Si ya está instalada, ocultar botón y salir
+  const isStandalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || (window.navigator.standalone===true);
   if (isStandalone){ btn.style.display='none'; return; }
 
-  // Plataforma
   const isAndroid = /Android/i.test(navigator.userAgent);
   const isIOS     = /iPhone|iPad|iPod/i.test(navigator.userAgent);
 
-  // beforeinstallprompt (Android y navegadores compatibles)
+  // Estado para Android (beforeinstallprompt)
   let deferredPrompt = null;
   window.addEventListener('beforeinstallprompt', (e)=>{
     e.preventDefault();
@@ -582,49 +579,150 @@ const done = ()=>{
     btn.disabled = false;
   });
 
-  // Click del botón "Descargar App"
-  btn.addEventListener('click', async (ev)=>{
-    ev.preventDefault();
+  // ===== UI Guía (modal + modo flotante) =====
+  const guide = document.createElement('div');
+  guide.id = 'pwa-guide';
+  guide.style.cssText = `
+    position:fixed; inset:auto 12px 12px 12px; left:50%; transform:translateX(-50%);
+    max-width:520px; background:#fff; border:1px solid #e5e7eb; border-radius:14px;
+    box-shadow:0 12px 40px rgba(0,0,0,.25); z-index:100002; display:none; overflow:hidden;
+  `;
+  guide.innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid #eee;background:#f8fafc">
+      <strong style="font:700 14px system-ui">Instalar la app</strong>
+      <span style="margin-left:auto"></span>
+      <button id="pwa-pin" style="background:#111;color:#fff;border:0;border-radius:8px;padding:6px 10px">Anclar</button>
+      <button id="pwa-close" style="background:#6b7280;color:#fff;border:0;border-radius:8px;padding:6px 10px">Cerrar</button>
+    </div>
+    <div id="pwa-steps" style="padding:12px"></div>
+    <div id="pwa-cta" style="display:flex;gap:8px;justify-content:flex-end;padding:10px 12px;border-top:1px solid #eee;background:#fafafa"></div>
+  `;
+  document.body.appendChild(guide);
 
-    // ✅ iOS: SIEMPRE mostrar instrucciones (no abrir hoja de compartir)
-    if (isIOS){
-      alert(
-        'Paso 1: Toca los 3 puntos (abajo derecha o arriba).\n' +
-        '(De no ver los tres puntos [...] presiona "compartir" abajo [cuadro con flecha hacia arriba]).\n' +
-        'Paso 2: Presiona "Compartir"\n' +
-        'Paso 3: Desliza hacia abajo y presiona "Agregar a Inicio".\n' +
-        'Paso 4: Arriba derecha presiona "Agregar" (botón azul).'
-      );
-      return;
+  // Barra flotante compacta
+  const dock = document.createElement('div');
+  dock.id = 'pwa-dock';
+  dock.style.cssText = `
+    position:fixed; right:14px; bottom:14px; z-index:100001;
+    display:none; align-items:center; gap:10px;
+    background:#111; color:#fff; border-radius:999px; padding:10px 14px;
+    box-shadow:0 10px 25px rgba(0,0,0,.35); font:600 13px system-ui; cursor:pointer;
+  `;
+  dock.innerHTML = `<span>Guía de instalación</span><span id="pwa-step-ind">(1/4)</span>`;
+  document.body.appendChild(dock);
+
+  // Pasos (iOS siempre guía; Android guía sólo si no hay prompt disponible)
+  const stepsIOS = [
+    'Paso 1: Toca los “tres puntos” abajo o arriba a la derecha.',
+    'Paso 2: Presiona “Compartir”.',
+    'Paso 3: Desliza hacia abajo y presiona “Agregar a Inicio”.',
+    'Paso 4: Arriba a la derecha, presiona el botón azul “Agregar”.'
+  ];
+  const stepsAndroidText = [
+    'Paso 1: Toca el menú del navegador (☰ o ⋮).',
+    'Paso 2: Elige “Agregar a la pantalla de inicio”.',
+    'Paso 3: Confirma con “Agregar”.',
+    'Listo: Busca el ícono en tu pantalla de inicio.'
+  ];
+
+  let currentStep = 0;
+  let pinned = false; // modo flotante activo
+
+  function renderGuide(options){
+    const steps = options.steps;
+    const $steps = $('#pwa-steps');
+    const $cta   = $('#pwa-cta');
+    const total  = steps.length;
+
+    $steps.innerHTML = `
+      <ol style="margin:0;padding-left:18px;font:400 14px/1.55 system-ui">
+        ${steps.map((t,i)=>`<li style="margin:6px 0;${i===currentStep?'font-weight:800':''}">${t}</li>`).join('')}
+      </ol>
+    `;
+
+    // CTA
+    $cta.innerHTML = '';
+    // Android con prompt disponible: botón extra
+    if (options.showPromptButton){
+      const tryBtn = el('button',{textContent:'Probar instalar ahora'});
+      tryBtn.style.cssText='background:#2563eb;color:#fff;border:0;border-radius:8px;padding:8px 12px';
+      tryBtn.onclick = async ()=>{
+        if (!deferredPrompt) return;
+        try{
+          deferredPrompt.prompt();
+          await deferredPrompt.userChoice;
+        }catch(_){}
+      };
+      $cta.appendChild(tryBtn);
     }
 
-    // ✅ Android: usar el prompt nativo si está disponible
-    if (isAndroid && deferredPrompt){
-      try{
-        deferredPrompt.prompt();
-        await deferredPrompt.userChoice; // accepted | dismissed
-      }catch(_){}
-      deferredPrompt = null; // se usa una sola vez
-      return;
-    }
+    const back = el('button',{textContent:'Atrás'});
+    back.style.cssText='background:#e5e7eb;color:#111;border:0;border-radius:8px;padding:8px 12px';
+    back.disabled = currentStep===0;
+    back.onclick = ()=>{ currentStep=Math.max(0,currentStep-1); updateUI(options); };
 
-    // Otros navegadores de escritorio: Web Share si existe…
-    if (navigator.share){
-      try{
-        await navigator.share({
-          title: document.title || (cfg.meta?.appName || 'Mi App'),
-          text: cfg.pwa?.install?.shareText || 'Instala la app en tu pantalla de inicio',
-          url: location.href
-        });
-      }catch(_){}
-      return;
-    }
+    const next = el('button',{textContent: (currentStep===total-1?'Listo':'Siguiente')});
+    next.style.cssText='background:#111;color:#fff;border:0;border-radius:8px;padding:8px 12px';
+    next.onclick = ()=>{
+      if (currentStep===total-1){
+        // no cerramos automáticamente: dejamos la guía abierta por si el usuario quiere revisar
+        return;
+      }
+      currentStep = Math.min(total-1, currentStep+1);
+      updateUI(options);
+    };
 
-    // …o fallback genérico
-    alert('En tu navegador: abre el menú y elige "Agregar a la pantalla de inicio".');
+    $cta.append(back, next);
+    $('#pwa-step-ind').textContent = `(${currentStep+1}/${total})`;
+  }
+
+  function updateUI(options){
+    renderGuide(options);
+    if (pinned){
+      // modo flotante visible y modal oculto
+      guide.style.display='none';
+      dock.style.display='flex';
+    } else {
+      guide.style.display='block';
+      dock.style.display='none';
+    }
+  }
+
+  function openGuide(){
+    currentStep = 0;
+    pinned = false;
+    const useAndroidPrompt = (isAndroid && !!deferredPrompt);
+    const opts = {
+      steps: (isIOS ? stepsIOS : (useAndroidPrompt ? stepsAndroidText : stepsAndroidText)),
+      showPromptButton: useAndroidPrompt
+    };
+    updateUI(opts);
+  }
+
+  // Eventos UI
+  $('#pwa-close').addEventListener('click', ()=>{ guide.style.display='none'; dock.style.display='none'; });
+  $('#pwa-pin').addEventListener('click', ()=>{
+    pinned = !pinned;
+    const useAndroidPrompt = (isAndroid && !!deferredPrompt);
+    updateUI({ steps: (isIOS?stepsIOS:stepsAndroidText), showPromptButton: useAndroidPrompt });
+    $('#pwa-pin').textContent = pinned ? 'Desanclar' : 'Anclar';
+  });
+  dock.addEventListener('click', ()=>{
+    pinned = false;
+    const useAndroidPrompt = (isAndroid && !!deferredPrompt);
+    updateUI({ steps: (isIOS?stepsIOS:stepsAndroidText), showPromptButton: useAndroidPrompt });
+    $('#pwa-pin').textContent = 'Anclar';
   });
 
-  // Ocultar el botón si el usuario instala la PWA
+  // Click del botón “Descargar App”
+  btn.addEventListener('click', (ev)=>{
+    ev.preventDefault();
+    // Android: si hay prompt, mostramos guía con botón “Probar instalar ahora”
+    // iOS y Android sin prompt: guía de pasos. La guía NO se cierra cuando el usuario abre el menú/compartir.
+    openGuide();
+  });
+
+  // Si se instala (Android u otros), ocultar botón
   window.addEventListener('appinstalled', ()=>{ btn.style.display='none'; });
 })();
 
