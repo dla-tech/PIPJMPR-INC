@@ -557,249 +557,135 @@ const done = ()=>{
   })();
 })();
 
-/* === Guía PWA v2 (minimizable + arrastrable + “Siguiente” en mini) === */
+/* === Guía PWA v3: minimizable real + pill pequeña === */
 (function(){
   const BTN_ID = (window.APP_CONFIG?.pwa?.install?.buttonId)||'btn-install';
   const btnInstall = document.getElementById(BTN_ID);
-  if (!btnInstall) return;
+  if(!btnInstall) return;
 
-  // Reutiliza prompt si existe
   let deferredPrompt = window.__deferredPrompt || null;
   window.addEventListener('beforeinstallprompt', (e)=>{
-    try{ e.preventDefault(); }catch(_){}
-    deferredPrompt = e; window.__deferredPrompt = e;
+    e.preventDefault(); deferredPrompt=e; window.__deferredPrompt=e;
   });
 
   const isAndroid = /Android/i.test(navigator.userAgent);
   const isIOS     = /iPhone|iPad|iPod/i.test(navigator.userAgent);
 
-  // ---------- Estado ----------
-  let state = {
-    platform: isIOS ? 'ios' : 'android',
-    i: 0,
-    done: [],
-    minimized: false
-  };
+  let state = { platform:isIOS?'ios':'android', step:0, steps:[], done:[] };
 
-  // ---------- Pasos ----------
   function stepsFor(p){
-    return (p==='ios')
+    return p==='ios'
       ? [
-          'Paso 1: Toca los tres puntos o el botón “Compartir”.',
-          'Paso 2: Presiona “Compartir”.',
-          'Paso 3: Desliza y toca “Agregar a Inicio”.',
-          'Paso 4: Arriba derecha, toca “Agregar” (botón azul).'
-        ]
+        'Paso 1: Toca los tres puntos o el botón “Compartir”.',
+        'Paso 2: Presiona “Compartir”.',
+        'Paso 3: Desliza y toca “Agregar a Inicio”.',
+        'Paso 4: Arriba derecha, toca “Agregar” (botón azul).'
+      ]
       : [
-          'Paso 1: Toca el menú ⋮ (arriba derecha).',
-          'Paso 2: “Agregar a la pantalla de inicio”.',
-          'Paso 3: Confirma en el diálogo.',
-          'Listo: La app queda en tu pantalla.'
-        ];
+        'Paso 1: Toca el menú ⋮ (arriba derecha).',
+        'Paso 2: “Agregar a la pantalla de inicio”.',
+        'Paso 3: Confirma en el diálogo.',
+        'Listo: La app queda en tu pantalla.'
+      ];
   }
 
-  // ---------- UI: crear card + mini ----------
-  function ensureUI(){
-    // Overlay + card (una sola vez)
-    let cardWrap = document.getElementById('pwa-guide');
-    if (!cardWrap){
-      cardWrap = document.createElement('div');
-      cardWrap.id = 'pwa-guide';
-      cardWrap.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,.55);display:none;';
-      const card = document.createElement('div');
-      card.id = 'pwa-guide-card';
-      card.style.cssText = 'position:absolute;left:50%;top:20px;transform:translateX(-50%);width:min(540px,94vw);background:#fff;border-radius:14px;box-shadow:0 18px 50px rgba(0,0,0,.35);overflow:hidden;font:400 15px/1.5 system-ui,-apple-system,Segoe UI,Roboto;';
-      card.innerHTML = `
-        <div id="pwa-guide-drag" style="cursor:move;padding:10px 12px;border-bottom:1px solid #eee;display:flex;gap:8px;align-items:center">
-          <strong style="font:700 16px system-ui">Instalar la app</strong>
-          <span style="margin-left:auto"></span>
-          <button id="pwa-guide-min"  style="background:#e5e7eb;border:0;border-radius:8px;padding:6px 10px">Minimizar</button>
-          <button id="pwa-guide-close" style="background:#6b7280;color:#fff;border:0;border-radius:8px;padding:6px 10px">Cerrar</button>
-        </div>
-        <div id="pwa-guide-body" style="padding:14px 16px"></div>
-        <div style="display:flex;gap:10px;justify-content:flex-end;padding:12px 16px;border-top:1px solid #eee">
-          <button id="pwa-guide-done" style="background:#059669;color:#fff;border:0;border-radius:8px;padding:8px 12px">Marcar paso listo</button>
-          <button id="pwa-guide-back" style="display:none;background:#e5e7eb;border:0;border-radius:8px;padding:8px 12px">Atrás</button>
-          <button id="pwa-guide-next" style="background:#111;color:#fff;border:0;border-radius:8px;padding:8px 12px">Siguiente</button>
-        </div>`;
-      cardWrap.appendChild(card);
-      document.body.appendChild(cardWrap);
-
-      // Drag del card
-      makeDraggable(card, document.getElementById('pwa-guide-drag'), 'pwaGuideCardPos');
-    }
-
-    // Mini pill
-    let mini = document.getElementById('pwa-guide-mini');
-    if (!mini){
-      mini = document.createElement('div');
-      mini.id = 'pwa-guide-mini';
-      mini.style.cssText = `
-        position:fixed;right:16px;bottom:20px;z-index:100001;
-        display:none;gap:8px;align-items:center;
-        background:#111;color:#fff;border-radius:999px;padding:8px 10px;box-shadow:0 12px 30px rgba(0,0,0,.35);font:600 13px system-ui;`;
-      mini.innerHTML = `
-        <button id="pwa-mini-prev"  style="background:#222;color:#fff;border:0;border-radius:999px;padding:6px 8px">◀︎</button>
-        <span id="pwa-mini-text">iOS · Paso 1/4</span>
-        <button id="pwa-mini-next"  style="background:#2563eb;color:#fff;border:0;border-radius:999px;padding:6px 10px">Siguiente</button>
-        <button id="pwa-mini-open"  style="background:#059669;color:#fff;border:0;border-radius:999px;padding:6px 8px">?</button>`;
-      document.body.appendChild(mini);
-
-      // Drag del mini completo
-      makeDraggable(mini, mini, 'pwaGuideMiniPos');
-    }
-    return { cardWrap, mini };
-  }
-
-  // ---------- Drag util ----------
-  function makeDraggable(box, handle, key){
-    let sx=0, sy=0, bx=0, by=0, dragging=false;
-    // Restaurar pos
-    try{
-      const saved = JSON.parse(localStorage.getItem(key)||'null');
-      if (saved && typeof saved.x==='number' && typeof saved.y==='number'){
-        box.style.left = saved.x+'px';
-        box.style.top  = saved.y+'px';
-        box.style.transform = 'none';
-      }
-    }catch(_){}
-    function posWithin(x,y){
-      const W = window.innerWidth, H = window.innerHeight;
-      const r = box.getBoundingClientRect();
-      x = Math.max(6, Math.min(W - r.width - 6, x));
-      y = Math.max(6, Math.min(H - r.height - 6, y));
-      return {x,y};
-    }
+  function makeDraggable(el){
+    let sx,sy,sl,st,drag=false;
+    el.addEventListener('mousedown',start); el.addEventListener('touchstart',start,{passive:false});
     function start(ev){
-      const p = ('touches' in ev) ? ev.touches[0] : ev;
-      dragging=true; sx=p.clientX; sy=p.clientY;
-      const r = box.getBoundingClientRect(); bx=r.left; by=r.top;
-      document.addEventListener('mousemove', move, {passive:false});
-      document.addEventListener('touchmove', move, {passive:false});
-      document.addEventListener('mouseup', end, {once:true});
-      document.addEventListener('touchend', end, {once:true});
+      const p=('touches'in ev)?ev.touches[0]:ev;
+      drag=true; sx=p.clientX; sy=p.clientY;
+      const r=el.getBoundingClientRect(); sl=r.left; st=r.top;
+      document.addEventListener('mousemove',move); document.addEventListener('touchmove',move,{passive:false});
+      document.addEventListener('mouseup',end,{once:true}); document.addEventListener('touchend',end,{once:true});
       ev.preventDefault?.();
     }
     function move(ev){
-      if(!dragging) return;
-      const p = ('touches' in ev) ? ev.touches[0] : ev;
-      let nx = bx + (p.clientX - sx);
-      let ny = by + (p.clientY - sy);
-      const clamped = posWithin(nx,ny); nx=clamped.x; ny=clamped.y;
-      box.style.left = nx + 'px';
-      box.style.top  = ny + 'px';
-      box.style.transform = 'none';
-      ev.preventDefault?.();
+      if(!drag)return;
+      const p=('touches'in ev)?ev.touches[0]:ev;
+      el.style.left=(sl+(p.clientX-sx))+'px';
+      el.style.top =(st+(p.clientY-sy))+'px';
+      el.style.right='auto'; el.style.bottom='auto';
     }
-    function end(){
-      dragging=false;
-      try{
-        const r = box.getBoundingClientRect();
-        localStorage.setItem(key, JSON.stringify({x:r.left, y:r.top}));
-      }catch(_){}
-      document.removeEventListener('mousemove', move);
-      document.removeEventListener('touchmove', move);
-    }
-    handle.addEventListener('mousedown', start);
-    handle.addEventListener('touchstart', start, {passive:false});
+    function end(){drag=false;}
   }
 
-  // ---------- Pintar card ----------
+  function showGuide(){
+    removeUI();
+    state.steps=stepsFor(state.platform);
+    state.done=state.steps.map(()=>false);
+    state.step=0;
+
+    const wrap=document.createElement('div');
+    wrap.id='pwa-guide';
+    wrap.style.cssText='position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;';
+    wrap.innerHTML=`
+      <div id="pwa-card" style="width:min(520px,92vw);background:#fff;border-radius:12px;box-shadow:0 16px 40px rgba(0,0,0,.35);font:15px system-ui;padding:14px;position:relative">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <strong style="font:700 16px system-ui">Instalar la app</strong>
+          <div style="display:flex;gap:6px">
+            <button id="pwa-min" style="background:#e5e7eb;border:0;border-radius:6px;padding:4px 8px">–</button>
+            <button id="pwa-close" style="background:#6b7280;color:#fff;border:0;border-radius:6px;padding:4px 8px">×</button>
+          </div>
+        </div>
+        <div id="pwa-body"></div>
+        <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:12px">
+          <button id="pwa-back" style="display:none;background:#e5e7eb;border:0;border-radius:6px;padding:6px 12px">Atrás</button>
+          <button id="pwa-next" style="background:#111;color:#fff;border:0;border-radius:6px;padding:6px 12px">Siguiente</button>
+        </div>
+      </div>`;
+    document.body.appendChild(wrap);
+
+    paintCard();
+    wrap.querySelector('#pwa-next').onclick=()=>{ if(state.step<state.steps.length-1){state.step++;paintCard();} else removeUI(); };
+    wrap.querySelector('#pwa-back').onclick=()=>{ if(state.step>0){state.step--;paintCard();} };
+    wrap.querySelector('#pwa-close').onclick=()=>removeUI();
+    wrap.querySelector('#pwa-min').onclick=()=>{ wrap.remove(); showMini(); };
+  }
+
   function paintCard(){
-    const { cardWrap } = ensureUI();
-    const card = document.getElementById('pwa-guide-card');
-    const body = document.getElementById('pwa-guide-body');
-    const btnNext = document.getElementById('pwa-guide-next');
-    const btnBack = document.getElementById('pwa-guide-back');
-    const btnDone = document.getElementById('pwa-guide-done');
-    const btnMin  = document.getElementById('pwa-guide-min');
-    const btnClose= document.getElementById('pwa-guide-close');
-
-    const steps = stepsFor(state.platform);
-    if (!state.done.length) state.done = steps.map(()=>false);
-
-    body.innerHTML = `
-      <div style="margin:0 0 8px;color:#6b7280">Guía ${state.platform==='ios'?'iOS':'Android'}</div>
-      <ol id="pwa-steps" style="margin:0;padding-left:20px">
-        ${steps.map((s,idx)=>{
-          const active = (idx===state.i);
-          const ok = state.done[idx];
-          const color = ok ? '#059669' : active ? '#111' : '#374151';
-          const icon  = ok ? '✔︎ ' : '';
-          return `<li style="margin:8px 0;color:${color};${active?'font-weight:700':''}">${icon}${s}</li>`;
-        }).join('')}
-      </ol>
-      ${
-        (state.platform!=='ios' && deferredPrompt)
-        ? `<div style="margin-top:10px">
-             <button id="pwa-try-prompt" style="background:#2563eb;color:#fff;border:0;border-radius:8px;padding:8px 12px">Probar instalar ahora</button>
-           </div>`
-        : ''
-      }
-      <div style="margin-top:8px;color:#6b7280;font-size:12px">Puedes arrastrar este recuadro para que no tape los menús.</div>
-    `;
-
-    // botones
-    btnBack.style.display = (state.i>0) ? '' : 'none';
-    btnNext.textContent   = (state.i<steps.length-1) ? 'Siguiente' : 'Listo';
-
-    btnDone.onclick = () => { state.done[state.i]=true; paintCard(); paintMini(); };
-    btnNext.onclick = () => {
-      if (state.i<steps.length-1) { state.i++; paintCard(); paintMini(); }
-      else { cardWrap.style.display='none'; state.minimized=false; hideMini(); }
-    };
-    btnBack.onclick = () => { if (state.i>0){ state.i--; paintCard(); paintMini(); } };
-    btnClose.onclick= () => { cardWrap.style.display='none'; state.minimized=false; hideMini(); };
-    btnMin.onclick  = () => { state.minimized=true; cardWrap.style.display='none'; showMini(); };
-
-    // Probar prompt (Android)
-    const tryBtn = document.getElementById('pwa-try-prompt');
-    if (tryBtn){
-      tryBtn.onclick = async ()=>{
-        if (!deferredPrompt) return;
-        try{ deferredPrompt.prompt(); await deferredPrompt.userChoice; }catch(_){}
-        deferredPrompt = null; window.__deferredPrompt = null;
-      };
-    }
+    const body=document.getElementById('pwa-body');
+    const back=document.getElementById('pwa-back');
+    const next=document.getElementById('pwa-next');
+    body.innerHTML=`<ol style="margin:0;padding-left:20px">
+      ${state.steps.map((s,i)=>{
+        const active=(i===state.step), ok=state.done[i];
+        const color=ok?'#059669':active?'#111':'#555';
+        const icon=ok?'✔︎ ':'';
+        return `<li style="margin:6px 0;color:${color};${active?'font-weight:700':''}">${icon}${s}</li>`;
+      }).join('')}
+    </ol>`;
+    back.style.display=state.step>0?'':'none';
+    next.textContent=state.step<state.steps.length-1?'Siguiente':'Listo';
   }
 
-  // ---------- Mini ----------
-  function paintMini(){
-    const mini = document.getElementById('pwa-guide-mini'); if(!mini) return;
-    const steps = stepsFor(state.platform);
-    const t = `${state.platform==='ios'?'iOS':'Android'} · Paso ${Math.min(state.i+1, steps.length)}/${steps.length}`;
-    mini.querySelector('#pwa-mini-text').textContent = t;
-
-    // wires
-    mini.querySelector('#pwa-mini-open').onclick = ()=>{ state.minimized=false; showCard(); };
-    mini.querySelector('#pwa-mini-prev').onclick = ()=>{ if(state.i>0){ state.i--; paintMini(); paintCard(); } };
-    mini.querySelector('#pwa-mini-next').onclick = ()=>{
-      if (state.i<steps.length-1){ state.i++; paintMini(); paintCard(); }
-      else { hideMini(); }
-    };
+  function showMini(){
+    removeUI();
+    const mini=document.createElement('div');
+    mini.id='pwa-mini';
+    mini.style.cssText='position:fixed;right:16px;bottom:20px;z-index:100001;background:#111;color:#fff;border-radius:999px;padding:6px 10px;font:13px system-ui;display:flex;gap:6px;align-items:center;cursor:move';
+    mini.innerHTML=`<span id="mini-text">${state.platform==='ios'?'iOS':'Android'} paso ${state.step+1}/${state.steps.length}</span>
+      <button id="mini-open" style="background:#2563eb;color:#fff;border:0;border-radius:999px;padding:4px 8px">?</button>`;
+    document.body.appendChild(mini);
+    makeDraggable(mini);
+    mini.querySelector('#mini-open').onclick=()=>{ mini.remove(); showGuide(); };
   }
-  function showMini(){ ensureUI(); const mini=document.getElementById('pwa-guide-mini'); mini.style.display='flex'; paintMini(); }
-  function hideMini(){ const mini=document.getElementById('pwa-guide-mini'); if(mini) mini.style.display='none'; }
-  function showCard(){ const {cardWrap}=ensureUI(); cardWrap.style.display='block'; paintCard(); }
 
-  // ---------- Click del botón principal ----------
+  function removeUI(){
+    document.getElementById('pwa-guide')?.remove();
+    document.getElementById('pwa-mini')?.remove();
+  }
+
   btnInstall.addEventListener('click', async (e)=>{
     e.preventDefault();
-    // Ocultar botón si ya está instalada lo manejas fuera (tu bloque PWA existente)
-    const isStandalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || (window.navigator.standalone===true);
-    if (isStandalone) return;
+    const isStandalone=(window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches)||(window.navigator.standalone===true);
+    if(isStandalone) return;
 
-    // ANDROID prompt directo si está disponible
-    if (isAndroid && deferredPrompt){
+    if(isAndroid && deferredPrompt){
       try{ deferredPrompt.prompt(); await deferredPrompt.userChoice; }catch(_){}
       deferredPrompt=null; window.__deferredPrompt=null; return;
     }
-
-    // iOS o Android sin prompt → guía
-    state.platform = isIOS ? 'ios' : 'android';
-    state.i = 0; state.done = stepsFor(state.platform).map(()=>false);
-    state.minimized = false;
-    showCard();
+    showGuide();
   });
 })();
 
