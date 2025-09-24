@@ -111,11 +111,12 @@ window.APP_CONFIG = {
 
   /* ───────── ICS (martes/miércoles) ───────── */
   ics: {
-    url: "https://raw.githubusercontent.com/dla-tech/Media-privada/e3d2ade1012edc154134d5aeb3af46a5755643e5/calendarios/calendario.ics",
-    timeZone: "America/Puerto_Rico",
-    labels: { martesPrefix: "Martes", miercolesPrefix: "Miércoles" }
-  },
-  maps: { defaultTownFallback: "Maunabo, Puerto Rico" },
+  // Siempre apunta a la rama MAIN para leer la última versión del .ics
+  url: "https://raw.githubusercontent.com/dla-tech/Media-privada/refs/heads/main/calendarios/calendario.ics",
+  timeZone: "America/Puerto_Rico",
+  labels: { martesPrefix: "Martes", miercolesPrefix: "Miércoles" }
+},
+maps: { defaultTownFallback: "Maunabo, Puerto Rico" }
 
   /* ───────── Promos (JSON externo) ───────── */
   promos: {
