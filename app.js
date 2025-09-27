@@ -482,6 +482,119 @@ const done = ()=>{
   }
 })();
 
+/* === Auto-push cuando empieza el LIVE de YouTube (sin API key) === */
+(function(){
+  if(!window.__CFG_ALLOWED) return;
+  const cfg = window.APP_CONFIG || {};
+  const handle = (cfg.youtube?.handle || '').trim();
+  if (!handle) return;
+
+  // URL oEmbed que ya usas para detectar el live
+  const OEMBED = `https://www.youtube.com/oembed?url=${encodeURIComponent(`https://www.youtube.com/${handle.replace(/^@/,'@')}/live`)}&format=json`;
+
+  // Tu endpoint para disparar la notificación (Cloud Run)
+  const PUSH_URL = "https://enviarnotificacion-4f4cs55kda-uc.a.run.app";
+
+  // Claves de storage para recordar estado
+  const K_STATE   = 'yt_last_live_state';   // "live" | "off" (string)
+  const K_LAST_TS = 'yt_last_push_ts';      // epoch ms
+
+  // Ventana mínima entre pushes (ms)
+  const MIN_PUSH_INTERVAL = 30 * 60 * 1000; // 30min
+  // Cada cuánto chequear (ms)
+  const POLL_MS = 60 * 1000;
+
+  function get(k, def){ try{ const v = localStorage.getItem(k); return v==null?def:v; }catch{ return def; } }
+  function set(k, v){ try{ localStorage.setItem(k, String(v)); }catch{} }
+
+  // Banner interno si el usuario no tiene permisos de notificación
+  function showSoftBanner(msg){
+    let b = document.getElementById('yt-soft-banner');
+    if (!b){
+      b = document.createElement('div');
+      b.id = 'yt-soft-banner';
+      b.style.cssText = `
+        position:fixed;left:50%;transform:translateX(-50%);
+        bottom:18px;z-index:100002;
+        background:#111;color:#fff;padding:10px 14px;border-radius:10px;
+        box-shadow:0 8px 24px rgba(0,0,0,.25);font:600 14px system-ui`;
+      document.body.appendChild(b);
+    }
+    b.textContent = msg || '¡Estamos en vivo!';
+    b.style.display = 'block';
+    setTimeout(()=>{ b.style.display='none'; }, 3000);
+  }
+
+  async function isLiveNow(){
+    try{
+      const r = await fetch(OEMBED, { mode:'cors', cache:'no-store' });
+      if (!r.ok) return false;
+      // Si responde 200 asumimos live
+      return true;
+    }catch(_){
+      return false;
+    }
+  }
+
+  async function firePushOnce(){
+    // Rate limit
+    const last = +get(K_LAST_TS, 0);
+    if (Date.now() - last < MIN_PUSH_INTERVAL) return;
+
+    // Mensaje por defecto
+    const title = 'PIPJM — ¡Estamos en vivo!';
+    const body  = 'El directo comenzó. Toca para verlo ahora.';
+    const link  = `https://www.youtube.com/${handle.replace(/^@/,'@')}/live`;
+    const image = ''; // si quieres miniatura, podrías poner una estática
+
+    try{
+      await fetch(PUSH_URL, {
+        method: 'POST',
+        headers: { 'Content-Type':'application/json' },
+        body: JSON.stringify({ title, body, link, image })
+      });
+      set(K_LAST_TS, Date.now());
+    }catch(e){
+      console.error('No se pudo enviar push LIVE:', e);
+    }
+  }
+
+  async function tick(){
+    const live = await isLiveNow();
+    const prev = get(K_STATE, 'off');
+
+    // Cambio OFFLINE -> LIVE
+    if (live && prev !== 'live'){
+      set(K_STATE, 'live');
+
+      // 1) Intenta enviar push a los que tienen permisos
+      await firePushOnce();
+
+      // 2) Para los que NO tienen permisos push: banner interno (solo cuando ocurre el cambio)
+      const perm = (typeof Notification !== 'undefined') ? Notification.permission : 'default';
+      if (perm !== 'granted'){
+        showSoftBanner('🔴 En vivo ahora — toca YouTube para entrar');
+      }
+    }
+    // Cambio LIVE -> OFFLINE (solo registramos)
+    else if (!live && prev !== 'off'){
+      set(K_STATE, 'off');
+    }
+  }
+
+  // Arranque: fija estado inicial y programa poll
+  (async function init(){
+    try{
+      const live0 = await isLiveNow();
+      set(K_STATE, live0 ? 'live' : 'off');
+    }catch(_){
+      set(K_STATE, 'off');
+    }
+    // Chequea cada minuto
+    setInterval(tick, POLL_MS);
+  })();
+})();
+
 /* ───────── Promos (JSON) ───────── */
 (function(){
   if(!window.__CFG_ALLOWED) return;
