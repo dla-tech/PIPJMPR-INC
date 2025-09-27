@@ -482,76 +482,82 @@ const done = ()=>{
   }
 })();
 
-/* === Auto-push cuando empieza el LIVE de YouTube (sin API key) === */
+/* === Auto-push cuando empieza el LIVE + banner interno (sin URL ni imagen) === */
 (function(){
   if(!window.__CFG_ALLOWED) return;
   const cfg = window.APP_CONFIG || {};
   const handle = (cfg.youtube?.handle || '').trim();
   if (!handle) return;
 
-  // URL oEmbed que ya usas para detectar el live
-  const OEMBED = `https://www.youtube.com/oembed?url=${encodeURIComponent(`https://www.youtube.com/${handle.replace(/^@/,'@')}/live`)}&format=json`;
+  // Detecta LIVE con oEmbed (200 = live en la URL /live)
+  const OEMBED = `https://www.youtube.com/oembed?url=${
+    encodeURIComponent(`https://www.youtube.com/${handle.replace(/^@/,'@')}/live`)
+  }&format=json`;
 
-  // Tu endpoint para disparar la notificación (Cloud Run)
+  // Tu endpoint de notificaciones (Cloud Run)
   const PUSH_URL = "https://enviarnotificacion-4f4cs55kda-uc.a.run.app";
 
-  // Claves de storage para recordar estado
-  const K_STATE   = 'yt_last_live_state';   // "live" | "off" (string)
+  // Claves de storage para evitar repetir pushes
+  const K_STATE   = 'yt_last_live_state';   // "live" | "off"
   const K_LAST_TS = 'yt_last_push_ts';      // epoch ms
 
-  // Ventana mínima entre pushes (ms)
-  const MIN_PUSH_INTERVAL = 30 * 60 * 1000; // 30min
-  // Cada cuánto chequear (ms)
-  const POLL_MS = 60 * 1000;
+  // Ventana mínima entre pushes y frecuencia de chequeo
+  const MIN_PUSH_INTERVAL = 30 * 60 * 1000; // 30 min
+  const POLL_MS = 60 * 1000;                // 1 min
 
   function get(k, def){ try{ const v = localStorage.getItem(k); return v==null?def:v; }catch{ return def; } }
   function set(k, v){ try{ localStorage.setItem(k, String(v)); }catch{} }
 
-  // Banner interno si el usuario no tiene permisos de notificación
-  function showSoftBanner(msg){
-    let b = document.getElementById('yt-soft-banner');
-    if (!b){
-      b = document.createElement('div');
-      b.id = 'yt-soft-banner';
-      b.style.cssText = `
-        position:fixed;left:50%;transform:translateX(-50%);
-        bottom:18px;z-index:100002;
-        background:#111;color:#fff;padding:10px 14px;border-radius:10px;
-        box-shadow:0 8px 24px rgba(0,0,0,.25);font:600 14px system-ui`;
-      document.body.appendChild(b);
+  // Banner interno pequeño con CTA "Ver ahora" → hace scroll a #redes (YouTube live)
+  function showLiveBanner(){
+    let t = document.getElementById('yt-live-banner');
+    if (!t){
+      t = document.createElement('div');
+      t.id = 'yt-live-banner';
+      t.style.cssText = `
+        position:fixed;left:50%;transform:translateX(-50%);bottom:16px;
+        z-index:100003;display:flex;gap:10px;align-items:center;
+        background:#111;color:#fff;border-radius:999px;padding:8px 12px;
+        box-shadow:0 10px 28px rgba(0,0,0,.25);font:600 14px system-ui
+      `;
+      t.innerHTML = `
+        <span>🔴 En vivo ahora</span>
+        <button id="ylb-open" style="background:#10b981;color:#fff;border:0;border-radius:999px;padding:6px 10px;font-weight:700">Ver ahora</button>
+        <button id="ylb-close" style="background:#374151;color:#fff;border:0;border-radius:999px;padding:6px 10px">Cerrar</button>
+      `;
+      document.body.appendChild(t);
+      t.querySelector('#ylb-open').addEventListener('click', ()=>{
+        const sec = document.getElementById('redes');
+        if (sec) sec.scrollIntoView({behavior:'smooth', block:'start'});
+        t.style.display = 'none';
+      });
+      t.querySelector('#ylb-close').addEventListener('click', ()=>{ t.style.display='none'; });
     }
-    b.textContent = msg || '¡Estamos en vivo!';
-    b.style.display = 'block';
-    setTimeout(()=>{ b.style.display='none'; }, 3000);
+    t.style.display = 'flex';
   }
 
   async function isLiveNow(){
     try{
       const r = await fetch(OEMBED, { mode:'cors', cache:'no-store' });
-      if (!r.ok) return false;
-      // Si responde 200 asumimos live
-      return true;
+      return r.ok; // 200 ⇒ live
     }catch(_){
       return false;
     }
   }
 
+  // Enviar push SOLO con {title, body}
   async function firePushOnce(){
-    // Rate limit
     const last = +get(K_LAST_TS, 0);
     if (Date.now() - last < MIN_PUSH_INTERVAL) return;
 
-    // Mensaje por defecto
     const title = 'PIPJM — ¡Estamos en vivo!';
-    const body  = 'El directo comenzó. Toca para verlo ahora.';
-    const link  = `https://www.youtube.com/${handle.replace(/^@/,'@')}/live`;
-    const image = ''; // si quieres miniatura, podrías poner una estática
+    const body  = 'El directo comenzó. Entra ahora para verlo.';
 
     try{
       await fetch(PUSH_URL, {
         method: 'POST',
         headers: { 'Content-Type':'application/json' },
-        body: JSON.stringify({ title, body, link, image })
+        body: JSON.stringify({ title, body }) // *** sin url ni image ***
       });
       set(K_LAST_TS, Date.now());
     }catch(e){
@@ -563,26 +569,23 @@ const done = ()=>{
     const live = await isLiveNow();
     const prev = get(K_STATE, 'off');
 
-    // Cambio OFFLINE -> LIVE
+    // OFF → LIVE
     if (live && prev !== 'live'){
       set(K_STATE, 'live');
 
-      // 1) Intenta enviar push a los que tienen permisos
+      // 1) Push para quienes tienen permisos activados
       await firePushOnce();
 
-      // 2) Para los que NO tienen permisos push: banner interno (solo cuando ocurre el cambio)
-      const perm = (typeof Notification !== 'undefined') ? Notification.permission : 'default';
-      if (perm !== 'granted'){
-        showSoftBanner('🔴 En vivo ahora — toca YouTube para entrar');
-      }
+      // 2) Banner interno para todos (estén o no con permisos)
+      showLiveBanner();
     }
-    // Cambio LIVE -> OFFLINE (solo registramos)
+    // LIVE → OFF
     else if (!live && prev !== 'off'){
       set(K_STATE, 'off');
     }
   }
 
-  // Arranque: fija estado inicial y programa poll
+  // Arranque: fija estado y agenda polling
   (async function init(){
     try{
       const live0 = await isLiveNow();
@@ -590,9 +593,16 @@ const done = ()=>{
     }catch(_){
       set(K_STATE, 'off');
     }
-    // Chequea cada minuto
     setInterval(tick, POLL_MS);
   })();
+
+  // Extra: si la app se abre desde un click de noti, mostrar también el banner
+  if ('serviceWorker' in navigator){
+    navigator.serviceWorker.addEventListener('message', (ev)=>{
+      const d = ev.data || {};
+      if (d.type === 'go'){ showLiveBanner(); }
+    });
+  }
 })();
 
 /* ───────── Promos (JSON) ───────── */
