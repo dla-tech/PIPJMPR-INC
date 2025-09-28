@@ -1,4 +1,4 @@
-
+ics
 /* app.js */
 
 const $  = (s,r=document)=>r.querySelector(s);
@@ -316,9 +316,14 @@ const done = ()=>{
 /* ───────── ICS (martes/miércoles) ───────── */
 (function(){
   if(!window.__CFG_ALLOWED) return;
-  const cfg=window.APP_CONFIG;
-  const ICS_URL = cfg.ics?.url; if(!ICS_URL) return;
-  const TZ = cfg.ics?.timeZone || 'America/Puerto_Rico';
+  const cfg = window.APP_CONFIG || {};
+
+  // Ruta por defecto si no se define en APP_CONFIG: ./calendarios/calendario.ics (resuelta a URL absoluta)
+  const ICS_URL = (cfg.ics?.url && cfg.ics.url.trim())
+    ? cfg.ics.url.trim()
+    : new URL('./calendarios/calendario.ics', location.href).href;
+
+  const TZ = (cfg.ics?.timeZone || 'America/Puerto_Rico').trim();
 
   const toPR = d => new Date(d.toLocaleString('en-US',{timeZone:TZ}));
   const startOfDay = d => (d=new Date(d), d.setHours(0,0,0,0), d);
@@ -328,21 +333,35 @@ const done = ()=>{
 
   (async function load(){
     try{
-      const res=await fetch(ICS_URL+'?t='+(Date.now()), {cache:'no-store'}); if(!res.ok) throw new Error('HTTP '+res.status);
+      // Fuerza bypass de caché (navegador y muchos SW)
+      const url = ICS_URL + (ICS_URL.includes('?') ? '&' : '?') + 't=' + Date.now();
+
+      const res = await fetch(url, {
+        cache: 'reload',
+        headers: {'Cache-Control':'no-cache'},
+        credentials: 'omit'
+      });
+      if(!res.ok) throw new Error('HTTP '+res.status+' al leer '+ICS_URL);
+
       const txt = unfold(await res.text());
       const blocks = txt.split(/BEGIN:VEVENT/).slice(1).map(b=>'BEGIN:VEVENT'+b.split('END:VEVENT')[0]);
 
       const now=new Date(), pr=toPR(now), sunday=startOfDay(addDays(pr,-pr.getDay()));
       const tue=addDays(sunday,2), wed=addDays(sunday,3);
 
-      function getLineVal(block, prop){ const m = block.match(new RegExp('^'+prop+'(?:;[^:\\n]*)?:(.*)$','mi')); return m?m[1].trim():null; }
+      function getLineVal(block, prop){
+        const m = block.match(new RegExp('^'+prop+'(?:;[^:\\n]*)?:(.*)$','mi'));
+        return m?m[1].trim():null;
+      }
+
       function parseDTSTART(block){
         const m = block.match(/^DTSTART([^:\n]*)?:([^\n]+)$/mi); if(!m) return null;
         const params=(m[1]||'').toUpperCase(); const val=m[2].trim();
         const dOnly=val.match(/^(\d{4})(\d{2})(\d{2})$/);
         if(/VALUE=DATE/.test(params) && dOnly){ const [_,Y,M,D]=dOnly; return new Date(Date.UTC(+Y,+M-1,+D,4,0,0)); }
         const dt=val.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z)?$/);
-        if(dt){ const [_,Y,M,D,hh,mm,ss,Z]=dt;
+        if(dt){
+          const [_,Y,M,D,hh,mm,ss,Z]=dt;
           if(/TZID=AMERICA\/PUERTO_RICO/.test(params)) return new Date(Date.UTC(+Y,+M-1,+D,+hh+4,+mm,+ss));
           if(Z) return new Date(Date.UTC(+Y,+M-1,+D,+hh,+mm,+ss));
           return new Date(Date.UTC(+Y,+M-1,+D,+hh+4,+mm,+ss));
@@ -387,7 +406,7 @@ const done = ()=>{
       const tIframe = $('#ubicacion-cultos .grid.cols-2 > div:nth-child(1) iframe');
       const wIframe = $('#ubicacion-cultos .grid.cols-2 > div:nth-child(2) iframe');
 
-      // === CAMBIO: soporta LOCATION como URL o texto y prioriza destino del overlay ===
+      // Soporta LOCATION como URL o texto y prioriza destino del overlay
       function normalizeLocation(raw){
         if(!raw) return 'Maunabo, Puerto Rico';
         const s = String(raw).trim();
@@ -434,10 +453,11 @@ const done = ()=>{
 
       setMap(tIframe, tueEv?.location, tueEv?.url||null);
       setMap(wIframe, wedEv?.location, wedEv?.url||null);
-    }catch(e){ console.error('No se pudo cargar el ICS:', e); }
+    }catch(e){
+      console.error('No se pudo cargar el ICS:', e);
+    }
   })();
 })();
-
 /* ───────── YouTube live ───────── */
 (function(){
   if(!window.__CFG_ALLOWED) return;
