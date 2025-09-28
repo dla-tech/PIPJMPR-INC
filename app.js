@@ -342,11 +342,7 @@ const done = ()=>{
         const dOnly=val.match(/^(\d{4})(\d{2})(\d{2})$/);
         if(/VALUE=DATE/.test(params) && dOnly){ const [_,Y,M,D]=dOnly; return new Date(Date.UTC(+Y,+M-1,+D,4,0,0)); }
         const dt=val.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z)?$/);
-        if(dt){ const [_,Y,M,D,hh,mm,ss,Z]=dt;
-          if(/TZID=AMERICA\/PUERTO_RICO/.test(params)) return new Date(Date.UTC(+Y,+M-1,+D,+hh+4,+mm,+ss));
-          if(Z) return new Date(Date.UTC(+Y,+M-1,+D,+hh,+mm,+ss));
-          return new Date(Date.UTC(+Y,+M-1,+D,+hh+4,+mm,+ss));
-        }
+        if(dt){ const [_,Y,M,D,hh,mm,ss,Z]=dt; if(/TZID=AMERICA\/PUERTO_RICO/.test(params)) return new Date(Date.UTC(+Y,+M-1,+D,+hh+4,+mm,+ss)); if(Z) return new Date(Date.UTC(+Y,+M-1,+D,+hh,+mm,+ss)); return new Date(Date.UTC(+Y,+M-1,+D,+hh+4,+mm,+ss)); }
         if(dOnly){ const [_,Y,M,D]=dOnly; return new Date(Date.UTC(+Y,+M-1,+D,4,0,0)); }
         return null;
       }
@@ -387,38 +383,20 @@ const done = ()=>{
       const tIframe = $('#ubicacion-cultos .grid.cols-2 > div:nth-child(1) iframe');
       const wIframe = $('#ubicacion-cultos .grid.cols-2 > div:nth-child(2) iframe');
 
-      // === CAMBIO: soporta LOCATION como URL o texto y prioriza destino del overlay ===
       function normalizeLocation(raw){
         if(!raw) return 'Maunabo, Puerto Rico';
-        const s = String(raw).trim();
-
-        // Si es URL (http/https), úsala tal cual
-        if (/^https?:\/\//i.test(s)) return s;
-
-        // Texto: limpiar adornos y completar municipio/PR
-        let txt = s.split(/[-–—/|]/).pop().trim();
-        txt = txt.replace(/\s*\(.*?\)\s*/g,' ').replace(/\s{2,}/g,' ').trim();
-
+        let txt=String(raw).split(/[-–—/|]/).pop().trim();
+        txt=txt.replace(/\s*\(.*?\)\s*/g,' ').replace(/\s{2,}/g,' ').trim();
         const municipios=['Maunabo','Emajagua','Yabucoa','Humacao','Las Piedras','Patillas','Guayama','San Lorenzo'];
-        const has = municipios.some(m=>new RegExp(`\\b${m}\\b`,'i').test(txt));
-        if (has){
-          if(!/puerto\s*rico/i.test(txt)) txt+=', Puerto Rico';
-          return txt;
-        }
+        const has=municipios.some(m=>new RegExp(`\\b${m}\\b`,'i').test(txt));
+        if(has){ if(!/puerto\s*rico/i.test(txt)) txt+=', Puerto Rico'; return txt; }
         return `${txt}, ${window.APP_CONFIG?.maps?.defaultTownFallback||'Maunabo, Puerto Rico'}`;
       }
-
       function setMap(iframeEl, locationText, pinUrl){
         if(!iframeEl) return;
-
-        const q = normalizeLocation(locationText);
-        const isUrl = /^https?:\/\//i.test(q);
-
-        // Mapa embebido (acepta q= con URL o con texto)
-        iframeEl.src   = 'https://www.google.com/maps?output=embed&q=' + encodeURIComponent(q);
-        iframeEl.title = 'Mapa: ' + (isUrl ? 'Ubicación' : q);
-
-        // Overlay clickeable (abre maps en nueva pestaña)
+        const q=normalizeLocation(locationText);
+        iframeEl.src='https://www.google.com/maps?output=embed&q='+encodeURIComponent(q);
+        iframeEl.title='Mapa: '+q;
         let overlay = iframeEl.parentElement.querySelector('.map-overlay');
         if(!overlay){
           overlay = el('a'); overlay.className='map-overlay'; overlay.target='_blank'; overlay.rel='noopener';
@@ -426,12 +404,8 @@ const done = ()=>{
           const holder=iframeEl.parentElement; const cs=getComputedStyle(holder);
           if(cs.position==='static') holder.style.position='relative'; holder.appendChild(overlay);
         }
-
-        // Prioridad: URL del ICS > LOCATION (si es URL) > búsqueda por texto/URL
-        overlay.href = pinUrl
-          || (isUrl ? q : 'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(q));
+        overlay.href = pinUrl || ('https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(q));
       }
-
       setMap(tIframe, tueEv?.location, tueEv?.url||null);
       setMap(wIframe, wedEv?.location, wedEv?.url||null);
     }catch(e){ console.error('No se pudo cargar el ICS:', e); }
@@ -1214,14 +1188,10 @@ function stepsFor(platform){
     }, { once:true });
   }
 
-  // 🔁 Exporta para que el wrapper de auto-link pueda decorarla
-  window.renderNotifView = renderNotifView;
-
   function maybeShowFromHash(){
     const p = parseHashNotif();
     if (!p) return;
-    // Usa la versión decorada si existe
-    (window.renderNotifView || renderNotifView)(p);
+    renderNotifView(p);
   }
 
   window.addEventListener('hashchange', maybeShowFromHash);
