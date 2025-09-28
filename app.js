@@ -316,102 +316,162 @@ const done = ()=>{
 /* ───────── ICS (martes/miércoles) ───────── */
 (function(){
   if(!window.__CFG_ALLOWED) return;
-  const cfg=window.APP_CONFIG;
-  const ICS_URL = cfg.ics?.url; if(!ICS_URL) return;
-  const TZ = cfg.ics?.timeZone || 'America/Puerto_Rico';
 
-  const toPR = d => new Date(d.toLocaleString('en-US',{timeZone:TZ}));
-  const startOfDay = d => (d=new Date(d), d.setHours(0,0,0,0), d);
-  const addDays = (d,n)=> (d=new Date(d), d.setDate(d.getDate()+n), d);
-  const sameDayPR = (a,b)=>{a=toPR(a);b=toPR(b);return a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate()};
-  const unfold = txt => txt.replace(/(?:\r\n|\n)[ \t]/g,'');
+  // Arranca cuando el DOM esté listo
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot, {once:true});
+  } else {
+    boot();
+  }
 
-  (async function load(){
-    try{
-      const res=await fetch(ICS_URL+'?t='+(Date.now()), {cache:'no-store'}); if(!res.ok) throw new Error('HTTP '+res.status);
-      const txt = unfold(await res.text());
-      const blocks = txt.split(/BEGIN:VEVENT/).slice(1).map(b=>'BEGIN:VEVENT'+b.split('END:VEVENT')[0]);
+  function boot(){
+    const cfg = window.APP_CONFIG || {};
+    const ICS_URL = (cfg.ics?.url && cfg.ics.url.trim())
+      ? cfg.ics.url.trim()
+      : new URL('./calendarios/calendario.ics', location.href).href;
 
+    const TZ = (cfg.ics?.timeZone || 'America/Puerto_Rico').trim();
+    const POLL_MS = Number(cfg.ics?.pollMs) > 10000 ? Number(cfg.ics.pollMs) : 180000; // 3 min
+
+    const toPR = d => new Date(d.toLocaleString('en-US',{timeZone:TZ}));
+    const startOfDay = d => (d=new Date(d), d.setHours(0,0,0,0), d);
+    const addDays = (d,n)=> (d=new Date(d), d.setDate(d.getDate()+n), d);
+    const sameDayPR = (a,b)=>{a=toPR(a);b=toPR(b);return a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate()};
+    const unfold = txt => txt.replace(/(?:\r\n|\n)[ \t]/g,'');
+    let lastSig = null; // firma simple para detectar cambios
+
+    async function loadAndRender(){
+      const cultos = document.getElementById('ubicacion-cultos');
+      if (!cultos) return;
+
+      // semana actual (se recalcula por si cambia a otra semana sin recargar)
       const now=new Date(), pr=toPR(now), sunday=startOfDay(addDays(pr,-pr.getDay()));
       const tue=addDays(sunday,2), wed=addDays(sunday,3);
 
-      function getLineVal(block, prop){ const m = block.match(new RegExp('^'+prop+'(?:;[^:\\n]*)?:(.*)$','mi')); return m?m[1].trim():null; }
-      function parseDTSTART(block){
-        const m = block.match(/^DTSTART([^:\n]*)?:([^\n]+)$/mi); if(!m) return null;
-        const params=(m[1]||'').toUpperCase(); const val=m[2].trim();
-        const dOnly=val.match(/^(\d{4})(\d{2})(\d{2})$/);
-        if(/VALUE=DATE/.test(params) && dOnly){ const [_,Y,M,D]=dOnly; return new Date(Date.UTC(+Y,+M-1,+D,4,0,0)); }
-        const dt=val.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z)?$/);
-        if(dt){ const [_,Y,M,D,hh,mm,ss,Z]=dt; if(/TZID=AMERICA\/PUERTO_RICO/.test(params)) return new Date(Date.UTC(+Y,+M-1,+D,+hh+4,+mm,+ss)); if(Z) return new Date(Date.UTC(+Y,+M-1,+D,+hh,+mm,+ss)); return new Date(Date.UTC(+Y,+M-1,+D,+hh+4,+mm,+ss)); }
-        if(dOnly){ const [_,Y,M,D]=dOnly; return new Date(Date.UTC(+Y,+M-1,+D,4,0,0)); }
-        return null;
-      }
+      try{
+        // Timeout para que no cuelgue
+        const ac = new AbortController();
+        const tId = setTimeout(()=>ac.abort(), 6000);
+        const url = ICS_URL + (ICS_URL.includes('?') ? '&' : '?') + 't=' + Date.now();
 
-      let tueEv=null, wedEv=null;
-      for(const ev of blocks){
-        const dt=parseDTSTART(ev); if(!dt) continue;
-        const obj={summary:getLineVal(ev,'SUMMARY'), location:getLineVal(ev,'LOCATION'), url:getLineVal(ev,'URL')};
-        if(!tueEv && sameDayPR(dt,tue)) tueEv=obj;
-        if(!wedEv && sameDayPR(dt,wed)) wedEv=obj;
-        if(tueEv && wedEv) break;
-      }
+        const res = await fetch(url, { cache:'no-store', signal: ac.signal });
+        clearTimeout(tId);
+        if(!res.ok) throw new Error('HTTP '+res.status+' al leer '+ICS_URL);
 
-      const cultos = $('#ubicacion-cultos'); if(!cultos) return;
-      cultos.innerHTML = `
-        <h2>Ubicación de cultos evangelísticos</h2>
-        <div class="card">
-          <p>Algunos servicios se realizan en ubicaciones distintas:</p>
-          <div class="grid cols-2">
-            <div>
-              <p class="subhead"><span id="lbl-martes">${(cfg.ics?.labels?.martesPrefix||'Martes')} ${tue.getDate()}</span></p>
-              <p><strong id="title-martes">Culto evangelístico</strong><br><span id="addr-martes">(dirección)</span></p>
-              <iframe height="260" loading="lazy" title="Culto martes"></iframe>
-            </div>
-            <div>
-              <p class="subhead"><span id="lbl-miercoles">${(cfg.ics?.labels?.miercolesPrefix||'Miércoles')} ${wed.getDate()}</span></p>
-              <p><strong id="title-miercoles">Culto evangelístico</strong><br><span id="addr-miercoles">(dirección)</span></p>
-              <iframe height="260" loading="lazy" title="Culto miércoles"></iframe>
-            </div>
-          </div>
-        </div>`;
+        const raw = await res.text();
+        const txt = unfold(raw);
 
-      if($('#title-martes') && tueEv?.summary) $('#title-martes').textContent=tueEv.summary;
-      if($('#title-miercoles') && wedEv?.summary) $('#title-miercoles').textContent=wedEv.summary;
-      if($('#addr-martes') && tueEv?.location) $('#addr-martes').textContent=tueEv.location;
-      if($('#addr-miercoles') && wedEv?.location) $('#addr-miercoles').textContent=wedEv.location;
+        // firma ligera del contenido para evitar re-render innecesario
+        const sig = txt.length + ':' + (txt.match(/BEGIN:VEVENT/g)||[]).length + ':' + (txt.match(/DTSTART/g)||[]).length;
+        if (sig === lastSig) return; // sin cambios: no tocamos el DOM
+        lastSig = sig;
 
-      const tIframe = $('#ubicacion-cultos .grid.cols-2 > div:nth-child(1) iframe');
-      const wIframe = $('#ubicacion-cultos .grid.cols-2 > div:nth-child(2) iframe');
+        const blocks = txt.split(/BEGIN:VEVENT/).slice(1).map(b=>'BEGIN:VEVENT'+b.split('END:VEVENT')[0]);
 
-      function normalizeLocation(raw){
-        if(!raw) return 'Maunabo, Puerto Rico';
-        let txt=String(raw).split(/[-–—/|]/).pop().trim();
-        txt=txt.replace(/\s*\(.*?\)\s*/g,' ').replace(/\s{2,}/g,' ').trim();
-        const municipios=['Maunabo','Emajagua','Yabucoa','Humacao','Las Piedras','Patillas','Guayama','San Lorenzo'];
-        const has=municipios.some(m=>new RegExp(`\\b${m}\\b`,'i').test(txt));
-        if(has){ if(!/puerto\s*rico/i.test(txt)) txt+=', Puerto Rico'; return txt; }
-        return `${txt}, ${window.APP_CONFIG?.maps?.defaultTownFallback||'Maunabo, Puerto Rico'}`;
-      }
-      function setMap(iframeEl, locationText, pinUrl){
-        if(!iframeEl) return;
-        const q=normalizeLocation(locationText);
-        iframeEl.src='https://www.google.com/maps?output=embed&q='+encodeURIComponent(q);
-        iframeEl.title='Mapa: '+q;
-        let overlay = iframeEl.parentElement.querySelector('.map-overlay');
-        if(!overlay){
-          overlay = el('a'); overlay.className='map-overlay'; overlay.target='_blank'; overlay.rel='noopener';
-          overlay.style.cssText='position:absolute;inset:0;z-index:5;';
-          const holder=iframeEl.parentElement; const cs=getComputedStyle(holder);
-          if(cs.position==='static') holder.style.position='relative'; holder.appendChild(overlay);
+        function getLineVal(block, prop){
+          const m = block.match(new RegExp('^'+prop+'(?:;[^:\\n]*)?:(.*)$','mi'));
+          return m?m[1].trim():null;
         }
-        overlay.href = pinUrl || ('https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(q));
-      }
-      setMap(tIframe, tueEv?.location, tueEv?.url||null);
-      setMap(wIframe, wedEv?.location, wedEv?.url||null);
-    }catch(e){ console.error('No se pudo cargar el ICS:', e); }
-  })();
-})();
+        function parseDTSTART(block){
+          const m = block.match(/^DTSTART([^:\n]*)?:([^\n]+)$/mi); if(!m) return null;
+          const params=(m[1]||'').toUpperCase(); const val=m[2].trim();
+          const dOnly=val.match(/^(\d{4})(\d{2})(\d{2})$/);
+          if(/VALUE=DATE/.test(params) && dOnly){ const [_,Y,M,D]=dOnly; return new Date(Date.UTC(+Y,+M-1,+D,4,0,0)); }
+          const dt=val.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z)?$/);
+          if(dt){
+            const [_,Y,M,D,hh,mm,ss,Z]=dt;
+            if(/TZID=AMERICA\/PUERTO_RICO/.test(params)) return new Date(Date.UTC(+Y,+M-1,+D,+hh+4,+mm,+ss));
+            if(Z) return new Date(Date.UTC(+Y,+M-1,+D,+hh,+mm,+ss));
+            return new Date(Date.UTC(+Y,+M-1,+D,+hh+4,+mm,+ss));
+          }
+          if(dOnly){ const [_,Y,M,D]=dOnly; return new Date(Date.UTC(+Y,+M-1,+D,4,0,0)); }
+          return null;
+        }
 
+        let tueEv=null, wedEv=null;
+        for(const ev of blocks){
+          const dt=parseDTSTART(ev); if(!dt) continue;
+          const obj={summary:getLineVal(ev,'SUMMARY'), location:getLineVal(ev,'LOCATION'), url:getLineVal(ev,'URL')};
+          if(!tueEv && sameDayPR(dt,tue)) tueEv=obj;
+          if(!wedEv && sameDayPR(dt,wed)) wedEv=obj;
+          if(tueEv && wedEv) break;
+        }
+
+        // (Re)construye la sección
+        cultos.innerHTML = `
+          <h2>Ubicación de cultos evangelísticos</h2>
+          <div class="card">
+            <p>Algunos servicios se realizan en ubicaciones distintas:</p>
+            <div class="grid cols-2">
+              <div>
+                <p class="subhead"><span id="lbl-martes">${(cfg.ics?.labels?.martesPrefix||'Martes')} ${tue.getDate()}</span></p>
+                <p><strong id="title-martes">Culto evangelístico</strong><br><span id="addr-martes">(dirección)</span></p>
+                <iframe height="260" loading="lazy" title="Culto martes"></iframe>
+              </div>
+              <div>
+                <p class="subhead"><span id="lbl-miercoles">${(cfg.ics?.labels?.miercolesPrefix||'Miércoles')} ${wed.getDate()}</span></p>
+                <p><strong id="title-miercoles">Culto evangelístico</strong><br><span id="addr-miercoles">(dirección)</span></p>
+                <iframe height="260" loading="lazy" title="Culto miércoles"></iframe>
+              </div>
+            </div>
+          </div>`;
+
+        if(document.getElementById('title-martes') && tueEv?.summary) document.getElementById('title-martes').textContent=tueEv.summary;
+        if(document.getElementById('title-miercoles') && wedEv?.summary) document.getElementById('title-miercoles').textContent=wedEv.summary;
+        if(document.getElementById('addr-martes') && tueEv?.location) document.getElementById('addr-martes').textContent=tueEv.location;
+        if(document.getElementById('addr-miercoles') && wedEv?.location) document.getElementById('addr-miercoles').textContent=wedEv.location;
+
+        const tIframe = document.querySelector('#ubicacion-cultos .grid.cols-2 > div:nth-child(1) iframe');
+        const wIframe = document.querySelector('#ubicacion-cultos .grid.cols-2 > div:nth-child(2) iframe');
+
+        // LOCATION admite URL o texto
+        function normalizeLocation(raw){
+          if(!raw) return 'Maunabo, Puerto Rico';
+          const s = String(raw).trim();
+          if (/^https?:\/\//i.test(s)) return s; // ya es URL
+          let txt = s.split(/[-–—/|]/).pop().trim();
+          txt = txt.replace(/\s*\(.*?\)\s*/g,' ').replace(/\s{2,}/g,' ').trim();
+          const municipios=['Maunabo','Emajagua','Yabucoa','Humacao','Las Piedras','Patillas','Guayama','San Lorenzo'];
+          const has = municipios.some(m=>new RegExp(`\\b${m}\\b`,'i').test(txt));
+          if (has){ if(!/puerto\s*rico/i.test(txt)) txt+=', Puerto Rico'; return txt; }
+          return `${txt}, ${window.APP_CONFIG?.maps?.defaultTownFallback||'Maunabo, Puerto Rico'}`;
+        }
+
+        function setMap(iframeEl, locationText, pinUrl){
+          if(!iframeEl) return;
+          const q = normalizeLocation(locationText);
+          const isUrl = /^https?:\/\//i.test(q);
+          iframeEl.src   = 'https://www.google.com/maps?output=embed&q=' + encodeURIComponent(q);
+          iframeEl.title = 'Mapa: ' + (isUrl ? 'Ubicación' : q);
+
+          // Overlay clickeable
+          let overlay = iframeEl.parentElement.querySelector('.map-overlay');
+          if(!overlay){
+            overlay = document.createElement('a');
+            overlay.className='map-overlay'; overlay.target='_blank'; overlay.rel='noopener';
+            overlay.style.cssText='position:absolute;inset:0;z-index:5;';
+            const holder=iframeEl.parentElement; const cs=getComputedStyle(holder);
+            if(cs.position==='static') holder.style.position='relative';
+            holder.appendChild(overlay);
+          }
+          overlay.href = pinUrl || (isUrl ? q : 'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(q));
+        }
+
+        setMap(tIframe, tueEv?.location, tueEv?.url||null);
+        setMap(wIframe, wedEv?.location, wedEv?.url||null);
+
+      }catch(e){
+        // Si falla, no rompemos la app
+        console.error('ICS: no se pudo cargar o parsear:', e);
+      }
+    }
+
+    // 1ª carga inmediata
+    loadAndRender();
+    // Refresco cada 3 min
+    setInterval(loadAndRender, POLL_MS);
+  }
+})();
 /* ───────── YouTube live ───────── */
 (function(){
   if(!window.__CFG_ALLOWED) return;
