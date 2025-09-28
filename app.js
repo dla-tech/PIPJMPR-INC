@@ -1214,10 +1214,14 @@ function stepsFor(platform){
     }, { once:true });
   }
 
+  // 🔁 Exporta para que el wrapper de auto-link pueda decorarla
+  window.renderNotifView = renderNotifView;
+
   function maybeShowFromHash(){
     const p = parseHashNotif();
     if (!p) return;
-    renderNotifView(p);
+    // Usa la versión decorada si existe
+    (window.renderNotifView || renderNotifView)(p);
   }
 
   window.addEventListener('hashchange', maybeShowFromHash);
