@@ -112,7 +112,7 @@ window.APP_CONFIG = {
     /* ───────── ICS (martes/miércoles) ───────── */
   ics: {
     // ⚠️ Usa siempre el enlace RAW de GitHub para que cargue bien
-    url: "https://raw.githubusercontent.com/dla-tech/Media-privada/main/calendarios/calendario.ics",
+    url: "https://calendar.google.com/calendar/ical/72086005a3ac9a324642e6977fb8f296d531c3520b03c6cf342495ed215e0186%40group.calendar.google.com/public/basic.ics",
 
     // Zona horaria en la que se interpretarán los eventos
     timeZone: "America/Puerto_Rico",
