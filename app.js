@@ -292,7 +292,7 @@ const done = ()=>{
     p.innerHTML = `
       <h2>Propósito</h2>
       <div class="card">
-        <p><strong>Nuestro propósito es:</strong> “Llevar el evangelio a toda criatura, dar un mensaje de esperanza, mostrar el amor de Dios al mundo y ayudar al necesitado.”</p>
+        <p><strong>Nuestro propósito</strong> es: “Llevar el evangelio a toda criatura, dar un mensaje de esperanza, mostrar el amor de Dios al mundo y ayudar al necesitado.”</p>
         <h3 style="margin-top:16px; font-size:1.1em; color:#0b1421;">Horarios de cultos y actividades</h3>
         <ul class="list">
           <li><strong>Lunes:</strong> Culto de oración en el templo — 7:00 p.m.</li>
