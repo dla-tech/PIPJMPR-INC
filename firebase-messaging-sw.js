@@ -1,20 +1,13 @@
 /* eslint-disable no-undef */
 /* === Firebase Messaging Service Worker (PWA) ================================
-   - Muestra la notificación (data-only y notification payload)
-   - Guarda un registro en IndexedDB (aunque la PWA no esté abierta)
-   - Al tocar la push abre/focus la PWA con el overlay (#/notif?...).
-   - Cuando hay clientes abiertos, también les manda postMessage (notif:new)
-   - Soporta sync: el cliente puede pedir "notif:pull" y se le devuelven todas.
-============================================================================= */
-
-importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js');
+  importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js');
 
 /* --- Control SW rápido --- */
 self.addEventListener('install', (e)=> self.skipWaiting());
 self.addEventListener('activate', (e)=> e.waitUntil(self.clients.claim()));
 
-/* --- Tu proyecto (el mismo del app.js/config.js) --- */
+/* --- Tu proyecto Firebase --- */
 firebase.initializeApp({
   apiKey: "AIzaSyAHQjMp8y9uaxAd0nnmCcVaXWSbij3cvEo",
   authDomain: "miappiglesia-c703a.firebaseapp.com",
@@ -25,12 +18,12 @@ firebase.initializeApp({
 });
 const messaging = firebase.messaging();
 
-/* --- Iconos por defecto (rutas de tu PWA) --- */
+/* --- Iconos por defecto --- */
 const DEFAULT_ICON  = "icons/icon-192.png";
 const DEFAULT_BADGE = "icons/icon-72.png";
 
 /* ============================================================================
-   IndexedDB (en el SW) para guardar notificaciones aunque la app esté cerrada
+   IndexedDB para guardar notificaciones
 ============================================================================ */
 const DB_NAME = 'app-notifs';
 const DB_STORE = 'notifs';
@@ -57,7 +50,7 @@ async function dbAdd(item){
     const tx = db.transaction(DB_STORE,'readwrite');
     tx.oncomplete = ()=>resolve(true);
     tx.onerror    = ()=>reject(tx.error);
-    tx.objectStore(DB_STORE).put(item); // put = upsert
+    tx.objectStore(DB_STORE).put(item);
   });
 }
 async function dbGetAll(){
@@ -89,13 +82,13 @@ async function dbMarkReadByContent(title, body){
 }
 
 /* ============================================================================
-   Utilidades de payload y URLs
+   Utilidades
 ============================================================================ */
 function extractPatterns(text){
   const t = String(text || '');
-  const mDate = t.match(/#\((\d{4}-\d{2}-\d{2})\)/);   // #(YYYY-MM-DD)
-  const mImg  = t.match(/#img\(([^)]+)\)/i);          // #img(URL)
-  const mLink = t.match(/#link\(([^)]+)\)/i);         // #link(URL)
+  const mDate = t.match(/#\((\d{4}-\d{2}-\d{2})\)/);
+  const mImg  = t.match(/#img\(([^)]+)\)/i);
+  const mLink = t.match(/#link\(([^)]+)\)/i);
   return {
     date:  mDate ? mDate[1] : '',
     image: mImg  ? mImg[1]  : '',
@@ -124,8 +117,6 @@ function makeInboxPayload({title, body, date, image, link}){
     read:  false
   };
 }
-
-/* --- Avisar a los clientes (si hay) --- */
 async function broadcastToClients(msg){
   try{
     const cs = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
@@ -142,7 +133,6 @@ messaging.onBackgroundMessage(async (payload) => {
 
   let title, body, meta = {};
   if (notif) {
-    // Mensaje con "notification" (Chrome lo muestra igual).
     title = notif.title || 'Notificación';
     body  = notif.body  || '';
     const found = extractPatterns(body);
@@ -152,7 +142,6 @@ messaging.onBackgroundMessage(async (payload) => {
       link:  data.link  || found.link  || ''
     };
   } else {
-    // Data-only → debemos mostrar nosotros
     title = data.title || 'Notificación';
     body  = data.body  || '';
     const found = extractPatterns(body);
@@ -164,36 +153,32 @@ messaging.onBackgroundMessage(async (payload) => {
   }
 
   const url = data.url || buildNotifUrl(title, body, meta);
-
-  // 1) Guardar en IndexedDB (la campana lo podrá leer luego)
   const item = makeInboxPayload({ title, body, date: meta.date, image: meta.image, link: meta.link });
+
+  // Guardar en IndexedDB
   try{ await dbAdd(item); }catch(_){}
 
-  // 2) Si hay clientes abiertos, avisar (la campana sube de inmediato)
-  broadcastToClients({ type: 'notif:new', payload: {
-    title: item.title, body: item.body, date: item.date, image: item.image, link: item.link
-  }});
+  // Notificar a las ventanas abiertas (PWA)
+  broadcastToClients({ type: 'notif:new', payload: item });
 
-  // 3) Mostrar la notificación del sistema (si es data-only o forzar para coherencia)
-  //    Para evitar duplicado en algunos Chrome/Android, usamos `tag` + `renotify:false`
-  const options = {
-    body,
-    icon:  data.icon  || DEFAULT_ICON,
-    badge: data.badge || DEFAULT_BADGE,
-    image: meta.image || undefined,
-    vibrate: [200, 100, 200],
-    tag: 'pipjm-notif',          // misma tag evita duplicados seguidos
-    renotify: false,
-    data: { title, body, date: meta.date, image: meta.image, link: meta.link, url }
-  };
-
-  // Si el mensaje YA traía notification, Chrome lo muestra aunque no llamemos showNotification.
-  // Aun así, para unificar (y cubrir iOS/otros browsers), invocamos showNotification de forma segura.
-  try{ await self.registration.showNotification(title, options); }catch(_){}
+  // Mostrar notificación del sistema SOLO si no la mostró FCM (data-only)
+  if (!notif) {
+    const options = {
+      body,
+      icon:  data.icon  || DEFAULT_ICON,
+      badge: data.badge || DEFAULT_BADGE,
+      image: meta.image || undefined,
+      vibrate: [200, 100, 200],
+      tag: 'pipjm-notif',
+      renotify: false,
+      data: { title, body, date: meta.date, image: meta.image, link: meta.link, url }
+    };
+    try{ await self.registration.showNotification(title, options); }catch(_){}
+  }
 });
 
 /* ============================================================================
-   Click en la notificación → abrir/focus la PWA y marcar leída
+   Click en la notificación
 ============================================================================ */
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
@@ -203,25 +188,19 @@ self.addEventListener('notificationclick', (event) => {
 
   event.waitUntil((async () => {
     const all = await self.clients.matchAll({ type:'window', includeUncontrolled:true });
-    // Probar reusar una ventana existente controlada por este SW
     for (const c of all){
       try{
-        // Navega si no tiene el hash correcto
         if (!c.url.includes(targetUrl) && 'navigate' in c) {
           await c.navigate(targetUrl);
         }
         await c.focus();
-        // marcar como leída por contenido (mejor matching)
         await dbMarkReadByContent(d.title||'', d.body||'');
-        // avisar al front
         broadcastToClients({ type:'notif:open', url: targetUrl });
         return;
       }catch(_){}
     }
-    // Si no hay ventanas, abrir una nueva dentro del scope del SW
     if (self.clients.openWindow) {
       await self.clients.openWindow(targetUrl);
-      // Intentar marcar y avisar
       try{ await dbMarkReadByContent(d.title||'', d.body||''); }catch(_){}
       setTimeout(()=>broadcastToClients({ type:'notif:open', url: targetUrl }), 500);
     }
@@ -230,7 +209,6 @@ self.addEventListener('notificationclick', (event) => {
 
 /* ============================================================================
    Canal de mensajes SW <-> PWA
-   - La app puede pedir "notif:pull" para sincronizar las guardadas OFFLINE
 ============================================================================ */
 self.addEventListener('message', (event)=>{
   const msg = event.data || {};
@@ -238,7 +216,6 @@ self.addEventListener('message', (event)=>{
     event.waitUntil((async ()=>{
       try{
         const list = await dbGetAll();
-        // ordenar por fecha desc
         list.sort((a,b)=>b.ts-a.ts);
         event.source?.postMessage({ type:'notif:list', items:list });
       }catch(_){
