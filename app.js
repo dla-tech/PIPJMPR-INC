@@ -1,3 +1,4 @@
+
 /* app.js */
 
 const $  = (s,r=document)=>r.querySelector(s);
@@ -20,24 +21,65 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
   }
 })();
 
-/* ───────── Sincronizar clic de notificación desde SW ───────── */
+/* ───────── HOTFIX: loader suave si el index lo mata ───────── */
 (function(){
   if(!window.__CFG_ALLOWED) return;
-  if (!('serviceWorker' in navigator)) return;
+  const cfg = window.APP_CONFIG||{};
+  const L   = cfg.loader||{};
 
-  navigator.serviceWorker.addEventListener('message', (ev) => {
-    try{
-      if (ev.data && ev.data.type === 'go' && typeof ev.data.url === 'string') {
-        const u = new URL(ev.data.url, location.origin);
-        // Si el SW manda la URL completa, usamos el hash para navegar sin recargar
-        if (u.hash) {
-          if (!location.hash.includes(u.hash)) {
-            location.hash = u.hash;
-          }
-        }
-      }
-    }catch(_){}
-  });
+  // Si el index ya quitó la clase 'loading' o borró el <style id="preload-style">,
+  // entonces activamos un loader alterno (#loader2) SIN tocar index.html
+  const killerRan = !document.documentElement.classList.contains('loading') ||
+                    !document.getElementById('preload-style');
+  if (!killerRan) return; // si el loader original sigue vivo, no hacemos nada
+
+  // Style suave: oculta todo menos #loader2
+  let s = document.getElementById('preload-style-soft');
+  if(!s){
+    s = document.createElement('style');
+    s.id = 'preload-style-soft';
+    s.textContent = 'body > *:not(#loader2){visibility:hidden}';
+    document.head.appendChild(s);
+  }
+  document.documentElement.classList.add('loading');
+
+  // Crear overlay #loader2 (copia visual del loader original)
+  let ld = document.getElementById('loader2');
+  if(!ld){
+    ld = document.createElement('div');
+    ld.id = 'loader2';
+    ld.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:transparent;z-index:100001;opacity:1;transition:opacity '+(+L.fadeMs||800)+'ms ease';
+    if (L.image){
+      const img = document.createElement('img');
+      img.src = L.image;
+      img.alt = 'Cargando';
+      img.style.cssText = 'position:absolute;inset:0;width:100vw;height:100vh;object-fit:'+(L.objectFit||'cover')+';object-position:'+(L.objectPosition||'50% 45%');
+      ld.appendChild(img);
+    }
+    document.body.appendChild(ld);
+  }
+
+  // Tiempos tomados del config (loader)
+  const MIN  = +L.minVisibleMs || 5000;         // mínimo visible
+  const FADE = +L.fadeMs       || 9000;          // desvanecido
+  const HARD = (+L.hardFallbackMs || MIN+FADE+2000); // tope duro
+  const start = performance.now();
+
+  function done2(){
+    document.documentElement.classList.remove('loading');
+    ld.style.opacity = '0';
+    setTimeout(()=>{ try{ ld.remove(); }catch(_){ } }, FADE+100);
+    document.getElementById('preload-style-soft')?.remove();
+  }
+
+  // Cierra cuando la página cargue + MIN visible
+  window.addEventListener('load', ()=>{
+    const wait = Math.max(0, MIN - (performance.now()-start));
+    setTimeout(done2, wait);
+  }, {once:true});
+
+  // Failsafe para no quedarse pegado
+  setTimeout(done2, HARD);
 })();
 
 /* ───────── Theme/Meta/Loader ───────── */
@@ -55,7 +97,7 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
   if(cfg.layout?.pageBackground?.overlay) cssv('--overlay', cfg.layout.pageBackground.overlay);
 
   // Loader
-  const L = cfg.loader||{};
+const L = cfg.loader||{};
   const loader = $('#loader');
   if(loader){
     loader.innerHTML='';
@@ -65,14 +107,17 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
       img.style.objectPosition=L.objectPosition||'50% 45%';
       loader.appendChild(img);
     }
-    const MIN = +L.minVisibleMs||1500, FADE=+L.fadeMs||2000, HARD=(+L.hardFallbackMs||MIN+FADE+1500);
-    const start=performance.now();
-    const done=()=>{
-     document.documentElement.classList.remove('loading');
-      loader.classList.add('hide');
-      $('#preload-style')?.remove();
-      setTimeout(()=>{ try{ loader.remove(); }catch(_){ } }, FADE+100);
-    };
+    const MIN  = +L.minVisibleMs || 8000;  // mínimo 5s visible
+const FADE = +L.fadeMs       || 7500;  // fade/desvanecido 3.5s
+const HARD = (+L.hardFallbackMs || MIN + FADE + 7500); // 8.5s máximo
+
+const start = performance.now();
+const done = ()=>{
+  document.documentElement.classList.remove('loading');
+  loader.classList.add('hide');
+  $('#preload-style')?.remove();
+  setTimeout(()=>{ try{ loader.remove(); }catch(_){ } }, FADE+100);
+};
     window.addEventListener('load', ()=>{
       const wait=Math.max(0, MIN - (performance.now()-start));
       setTimeout(done, wait);
@@ -80,14 +125,13 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
     setTimeout(done, HARD);
   }
 })();
-
-/* ───────── Header/Nav + autohide ───────── */
+  /* ───────── Header/Nav + autohide ───────── */
 (function(){
   if(!window.__CFG_ALLOWED) return;
   const cfg = window.APP_CONFIG;
   const header = $('#header'); if(!header) return;
 
-  header.style.backdropFilter = `saturate(${cfg.layout?.header?.glass?.saturate||1.2}) blur(${cfg.layout?.header?.glass?.blur||'8px'})`;
+  header.style.backdropFilter = `saturate(${cfg.layout?.header?.glass?.saturate||1.2}) blur(${cfg.layout?.header?.glass||'8px'})`;
   header.style.background = cfg.layout?.header?.bg || 'rgba(255,255,255,.55)';
   header.style.borderBottom = `1px solid ${cfg.layout?.header?.borderColor || 'rgba(0,0,0,.08)'}`;
 
@@ -98,20 +142,22 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
     nav.appendChild(el('a',{href:l.href||'#',textContent:l.label||l.id||'Link',className:'navlink'}));
   });
 
-  // notif + install
+  // Botón de activar notificaciones (permiso/token) — NO es la bandeja
   const nb = el('a',{
     id: cfg.nav?.notifButton?.id || 'btn-notifs',
     className: 'navlink',
     href: '#',
     textContent: cfg.nav?.notifButton?.labels?.default || 'NOTIFICACIONES'
   });
+  // visible solo en PWA instalada
   const isStandaloneNow =
     (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
     (window.navigator.standalone === true);
   nb.style.display = isStandaloneNow ? '' : 'none';
 
+  // Botón de instalar
   const ibCfg = cfg.nav?.installButton;
-  const ib = el('a',{id:ibCfg?.id||'btn-install',className:'navlink',href:'#',textContent:ibCfg?.label||'Descargar Web'});
+  const ib = el('a',{id:ibCfg?.id||'btn-install',className:'navlink',href:'#',textContent:ibCfg?.label||'Descargar App'});
   ib.style.background = ibCfg?.styles?.bg || '#7c3aed';
   ib.style.color = ibCfg?.styles?.color || '#fff';
   ib.style.fontWeight = '800';
@@ -140,9 +186,17 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
   const h1=el('h1'); h1.style.cssText='font-size:1.35em;line-height:1.25;font-weight:700;color:#fff;text-align:center;margin:10px 0 14px';
   h1.textContent = "Primera Iglesia Pentecostal de Jesucristo de Maunabo, P.R. Inc.";
 
-  const promosWrap = el('section',{id:'promos',className:'promos-wrap',style:'display:none'});
-  promosWrap.innerHTML = `<div id="promoGrid" class="promo-grid"></div>
-  <div class="promo-actions"><button id="btn-descargar-todo" class="promo-dl">${cfg.promos?.grid?.downloadAllLabel||'⬆️DESCARGAR PROMOS⬆️'}</button></div>`;
+  // Reutiliza el #promos del HTML y colócalo ARRIBA del calendario
+  const promosWrap = $('#promos');
+  if (promosWrap){
+    promosWrap.className = 'promos-wrap';
+    promosWrap.style.display = 'none';
+    promosWrap.innerHTML = `
+      <div id="promoGrid" class="promo-grid" style="--gap:12px;--radius:12px"></div>
+      <div class="promo-actions" style="display:flex;justify-content:center;margin:10px 0 16px">
+        <button id="btn-descargar-todo" class="promo-dl">${cfg.promos?.grid?.downloadAllLabel||'⬆️DESCARGAR PROMOS⬆️'}</button>
+      </div>`;
+  }
 
   const card=el('div'); card.className='card'; card.style.marginBottom='12px';
   const ifr=el('iframe',{src:cfg.calendars?.google?.embedUrl||'',title:'Calendario Google',loading:'lazy',referrerPolicy:'no-referrer-when-downgrade',height:'600'});
@@ -166,9 +220,11 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
   const note = el('p'); note.className='card note'; note.style.marginTop='12px';
   note.textContent='📌 Todo cambio en la programación de la iglesia se reflejará automáticamente en tu calendario.';
 
-  sec.innerHTML=''; sec.append(h1, promosWrap, card, grid, modal, note);
+  sec.innerHTML=''; 
+  if (promosWrap) sec.append(h1, promosWrap, card, grid, modal, note);
+  else            sec.append(h1, card, grid, modal, note);
 
-  // botones (igual a tu HTML)
+  // Botones calendario
   (function(){
     const isIOS=/iPhone|iPad|iPod/i.test(navigator.userAgent);
     const isAndroid=/Android/i.test(navigator.userAgent);
@@ -205,14 +261,6 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
         window.addEventListener('blur',onHidden,{once:true});
         const t1=setTimeout(()=>{ if(!f && !document.hidden) go(WEB_URL); },2200);
         const t2=setTimeout(()=>{ if(!f && !document.hidden) go('https://play.google.com/store/apps/details?id=com.google.android.calendar'); },4500);
-      }else if(isIOS){
-        const app1='comgooglecalendar://?cid='+encodeURIComponent(CAL_ID);
-        const app2='googlecalendar://?cid='+encodeURIComponent(CAL_ID);
-        const store='https://apps.apple.com/app/google-calendar/id909319292';
-        let left=false; const cleanup=()=>{document.removeEventListener('visibilitychange',onVis,true);window.removeEventListener('pagehide',onHide,true);window.removeEventListener('blur',onBlur,true);};
-        const onVis=()=>{ if(document.hidden){ left=true; cleanup(); } }; const onHide=()=>{ left=true; cleanup(); }; const onBlur=()=>{ left=true; cleanup(); };
-        document.addEventListener('visibilitychange',onVis,true); window.addEventListener('pagehide',onHide,true); window.addEventListener('blur',onBlur,true);
-        go(app1); setTimeout(()=>{ if(!left) go(app2); },600); setTimeout(()=>{ if(!left) go(store); },1800);
       }else go(WEB_URL);
     });
 
@@ -228,7 +276,6 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
 /* ───────── Secciones estáticas: templo+propósito ───────── */
 (function(){
   if(!window.__CFG_ALLOWED) return;
-  // Templo
   const t = $('#ubicacion-templo');
   if(t){
     t.innerHTML = `
@@ -240,7 +287,6 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
         </a>
       </div>`;
   }
-  // Propósito
   const p = $('#proposito');
   if(p){
     p.innerHTML = `
@@ -282,7 +328,7 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
 
   (async function load(){
     try{
-      const res=await fetch(ICS_URL+'?t='+Date.now(), {cache:'no-store'}); if(!res.ok) throw new Error('HTTP '+res.status);
+      const res=await fetch(ICS_URL+'?t='+(Date.now()), {cache:'no-store'}); if(!res.ok) throw new Error('HTTP '+res.status);
       const txt = unfold(await res.text());
       const blocks = txt.split(/BEGIN:VEVENT/).slice(1).map(b=>'BEGIN:VEVENT'+b.split('END:VEVENT')[0]);
 
@@ -310,7 +356,7 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
         if(tueEv && wedEv) break;
       }
 
-      const cultos = $('#ubicacion-cultos');
+      const cultos = $('#ubicacion-cultos'); if(!cultos) return;
       cultos.innerHTML = `
         <h2>Ubicación de cultos evangelísticos</h2>
         <div class="card">
@@ -369,33 +415,71 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
 /* ───────── YouTube live ───────── */
 (function(){
   if(!window.__CFG_ALLOWED) return;
-  const cfg=window.APP_CONFIG;
+  const cfg = window.APP_CONFIG;
   const sec = $('#redes'); if(!sec) return;
-  const h2=el('h2',{textContent:'Redes sociales'});
-  const card=el('div'); card.className='card';
-  const box=el('div'); box.className='grid cols-1';
-  const btn=el('a',{className:'btn btn-yt',href:`https://youtube.com/${(cfg.youtube?.handle||'@pipjm9752')}`,target:'_blank',rel:'noopener',textContent:'▶️ YouTube'});
-  const liveWrap=el('div',{id:'live-wrap',className:'live-wrap'});
-  liveWrap.innerHTML=`<div class="live-head"><span class="live-dot"></span> EN VIVO AHORA</div>
-  <div class="live-player" id="live-player"></div>
-  <a id="live-cta" class="live-cta" href="#" target="_blank" rel="noopener">Ver en YouTube</a>`;
-  const mail=el('a',{className:'btn btn-d',href:'mailto:pipjm1@gmail.com',textContent:'✉️ pipjm1@gmail.com'});
-  box.append(btn, liveWrap, mail); card.appendChild(box); sec.innerHTML=''; sec.append(h2,card);
 
-  const handle = cfg.youtube?.handle || '@pipjm9752';
+  // Título de sección
+  const h2 = el('h2',{textContent:'Redes sociales'});
+  const card = el('div'); card.className='card';
+  const box  = el('div'); box.className='grid cols-1';
+
+  // Botón YouTube
+  const btn = el('a',{
+    className:'btn btn-yt',
+    href:`https://youtube.com/${(cfg.youtube?.handle||'@pipjm9752')}`,
+    target:'_blank', rel:'noopener',
+    textContent:'▶️ YouTube'
+  });
+
+  // Contenedor Live
+  const liveWrap = el('div',{id:'live-wrap',className:'live-wrap'});
+  liveWrap.innerHTML = `
+    <div class="live-head"><span class="live-dot"></span> EN VIVO AHORA</div>
+    <div class="live-player" id="live-player"></div>
+    <a id="live-cta" class="live-cta" href="#" target="_blank" rel="noopener">Ver en YouTube</a>
+  `;
+
+  // Correo
+  const mail = el('a',{
+    className:'btn btn-d',
+    href:'mailto:pipjm1@gmail.com',
+    textContent:'✉️ pipjm1@gmail.com'
+  });
+
+  // Montar estructura
+  box.append(btn, liveWrap, mail);
+  card.appendChild(box);
+  sec.innerHTML=''; 
+  sec.append(h2,card);
+
+  // Configurar enlaces/live
+  const handle  = cfg.youtube?.handle || '@pipjm9752';
   const liveUrl = `https://www.youtube.com/${handle.replace(/^@/,'@')}/live`;
   $('#live-cta').href = liveUrl;
-  const oembed = `https://www.youtube.com/oembed?url=${encodeURIComponent(liveUrl)}&format=json`;
-  fetch(oembed,{mode:'cors'})
-    .then(r=>{ if(!r.ok) throw new Error('offline'); return r.json(); })
-    .then(()=>{
-      $('#live-wrap').style.display='block';
-      if(cfg.youtube?.channelId){
-        const src=`https://www.youtube.com/embed/live_stream?channel=${encodeURIComponent(cfg.youtube.channelId)}&autoplay=1&mute=1&rel=0&modestbranding=1`;
-        $('#live-player').innerHTML=`<iframe src="${src}" title="YouTube live" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>`;
-      }else $('#live-player').innerHTML='';
-    })
-    .catch(()=>{ const lw=$('#live-wrap'); if(lw) lw.style.display='none'; });
+
+  if (cfg.youtube?.channelId) {
+    // Mostrar bloque y embeber directamente el player
+    liveWrap.style.display = 'block';
+    const src = `https://www.youtube.com/embed/live_stream?channel=${encodeURIComponent(cfg.youtube.channelId)}&autoplay=1&mute=1&rel=0&modestbranding=1`;
+    $('#live-player').innerHTML = `
+      <iframe src="${src}" 
+              title="YouTube live" 
+              allow="autoplay; encrypted-media; picture-in-picture" 
+              allowfullscreen></iframe>`;
+
+    // Fallback si el iframe no carga en ~4s
+    setTimeout(() => {
+      const ifr = $('#live-player iframe');
+      if (!ifr || !ifr.contentWindow) {
+        liveWrap.style.display = 'block'; // deja visible el CTA aunque no cargue el iframe
+      }
+    }, 4000);
+
+  } else {
+    // Sin channelId: muestra solo el CTA
+    liveWrap.style.display = 'block';
+    $('#live-player').innerHTML = '';
+  }
 })();
 
 /* ───────── Promos (JSON) ───────── */
@@ -405,33 +489,63 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
   const section = $('#promos'); const grid = el('div',{id:'promoGrid',className:'promo-grid'});
   section.innerHTML=''; section.appendChild(grid);
   const actions=el('div',{className:'promo-actions'});
-  const btnAll=el('button',{id:'btn-descargar-todo',className:'promo-dl',textContent:(window.APP_CONFIG?.promos?.grid?.downloadAllLabel)||'⬆️DESCARGAR PROMOS⬆️'}); actions.appendChild(btnAll);
+  const btnAll=el('button',{id:'btn-descargar-todo',className:'promo-dl',textContent:(window.APP_CONFIG?.promos?.grid?.downloadAllLabel)||'⬆️DESCARGAR PROMOS⬆️'}); 
+  actions.appendChild(btnAll);
   section.appendChild(actions);
 
-  function computeMinWidthByCount(n){ if(n===1) return '480px'; if(n===2) return '300px'; if(n<=4) return '280px'; if(n<=6) return '240px'; if(n<=9) return '200px'; return '180px'; }
+  // ⚖️ Promos más finas y responsivas
+  function computeMinWidthByCount(n){
+    if(n===1) return '340px';
+    if(n===2) return '280px';
+    if(n<=4) return '240px';
+    if(n<=6) return '200px';
+    if(n<=9) return '180px';
+    return '160px';
+  }
+
   function render(promos){
     section.classList.toggle('one',promos.length===1);
     section.classList.toggle('two',promos.length===2);
     section.classList.toggle('many',promos.length>=3);
-    grid.style.setProperty('--min', computeMinWidthByCount(promos.length));
+
+    const minW = computeMinWidthByCount(promos.length);
+    grid.style.setProperty('--min', minW);
+    grid.style.display='grid';
+    grid.style.gridTemplateColumns='repeat(auto-fill, minmax(var(--min), 1fr))';
+    grid.style.gap='12px';
+
     grid.innerHTML = promos.map((p,i)=>`
-      <article class="promo-card" data-index="${i}">
-        <a class="promo-link" href="${p.img}" data-filename="${p.filename || `promo-${i+1}.jpg`}" download>
+      <article class="promo-card" data-index="${i}" style="width:var(--min);max-width:100%;overflow:hidden">
+        <a class="promo-link" href="${p.img}" data-filename="${p.filename || `promo-${i+1}.jpg`}" download style="display:block">
           <div class="promo-media">
-            <img src="${p.img}" alt="${p.title?p.title:`Promoción ${i+1}`}" loading="lazy" decoding="async">
+            <img src="${p.img}" alt="${p.title?p.title:`Promoción ${i+1}`}" 
+                 loading="lazy" decoding="async" 
+                 style="display:block;width:100%;height:auto;border-radius:12px" />
           </div>
         </a>
-        ${p.title?`<div class="promo-title">${p.title}</div>`:''}
+        ${p.title?`<div class="promo-title" style="padding:6px 4px 0;font:600 14px system-ui;text-align:center">${p.title}</div>`:''}
       </article>`).join('');
+
     section.style.display = promos.length?'block':'none';
-    btnAll.onclick = async ()=>{ for(const p of promos){ await downloadImage(p.img, p.filename||'promocion.jpg'); } };
-    grid.addEventListener('click', (e)=>{ const a=e.target.closest('a.promo-link'); if(!a) return; e.preventDefault(); downloadImage(a.href, a.dataset.filename||'promocion.jpg'); });
+
+    btnAll.onclick = async ()=>{
+      for(const p of promos){ await downloadImage(p.img, p.filename||'promocion.jpg'); }
+    };
+    grid.addEventListener('click', (e)=>{
+      const a=e.target.closest('a.promo-link'); if(!a) return;
+      e.preventDefault();
+      downloadImage(a.href, a.dataset.filename||'promocion.jpg');
+    });
   }
+
   async function downloadImage(url, filename){
-    try{ const res=await fetch(url,{cache:'no-store'}); if(!res.ok) throw new Error('HTTP '+res.status);
-      const blob=await res.blob(); const o=URL.createObjectURL(blob); const a=el('a',{href:o,download:filename}); document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(o);
-    }catch(e){ const a=el('a',{href:url,download:filename}); document.body.appendChild(a); a.click(); a.remove(); }
+    try{
+      const res=await fetch(url,{cache:'no-store'}); if(!res.ok) throw new Error('HTTP '+res.status);
+      const blob=await res.blob(); const o=URL.createObjectURL(blob);
+      const a=el('a',{href:o,download:filename}); document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(o);
+    }catch{ const a=el('a',{href:url,download:filename}); document.body.appendChild(a); a.click(); a.remove(); }
   }
+
   (async function load(){
     try{
       const res=await fetch(url+'?t='+Date.now(),{cache:'no-store'}); if(!res.ok) throw new Error('HTTP '+res.status);
@@ -443,70 +557,239 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
   })();
 })();
 
-/* ───────── PWA install ───────── */
+/* === PWA install — compacto, draggable, con minimizar (Android+iOS) === */
 (function(){
   if(!window.__CFG_ALLOWED) return;
-  const cfg = window.APP_CONFIG;
-  const btn = $('#'+(cfg.pwa?.install?.buttonId||'btn-install')); if(!btn) return;
+  const cfg = window.APP_CONFIG || {};
+  const btn = document.getElementById((cfg.pwa?.install?.buttonId)||'btn-install');
+  if(!btn) return;
 
-  // Mostrar SOLO en navegador (no en PWA instalada)
+  // Ocultar si ya está instalada
   const isStandalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || (window.navigator.standalone===true);
-  if(isStandalone){ btn.style.display='none'; return; }
+  if (isStandalone){ btn.style.display='none'; return; }
 
-  // Detectamos plataforma
   const isAndroid = /Android/i.test(navigator.userAgent);
   const isIOS     = /iPhone|iPad|iPod/i.test(navigator.userAgent);
 
-  // Mantén soporte para Android (beforeinstallprompt) sin refrescar la página
-  let deferredPrompt=null;
+  // Captura / reutiliza el beforeinstallprompt
+  let deferredPrompt = window.__deferredPrompt || null;
   window.addEventListener('beforeinstallprompt', (e)=>{
-    e.preventDefault();
+    try{ e.preventDefault(); }catch(_){}
     deferredPrompt = e;
+    window.__deferredPrompt = e;
+    // Asegura visibilidad del botón si el navegador lo soporta
     btn.style.display = '';
     btn.disabled = false;
   });
 
-  // Click del botón: en Android usa el prompt nativo; en iOS/otros usa Web Share si existe; si no, muestra instrucciones
-  btn.addEventListener('click', async (ev)=>{
-    ev.preventDefault();
+  // ───────── UI compacta (widget) ─────────
+  let widget = null;
+  function ensureWidget(){
+    if (widget) return widget;
+    const w = document.createElement('div');
+    w.id = 'pwa-mini-widget';
+    w.style.cssText = `
+      position:fixed; right:14px; bottom:14px; z-index:100000;
+      width: 300px; max-width: 92vw;
+      font: 400 14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Arial;
+      color:#111;
+    `;
+    w.innerHTML = `
+      <div id="pwa-card" style="
+        background:#fff; border:1px solid #e5e7eb; border-radius:12px;
+        box-shadow:0 8px 22px rgba(0,0,0,.18);
+      ">
+        <div id="pwa-head" style="
+          cursor:move; display:flex; align-items:center; gap:8px;
+          padding:8px 10px; border-bottom:1px solid #eef0f2; background:#f9fafb; border-radius:12px 12px 0 0;
+        ">
+          <strong style="font:700 13px system-ui">Instalar app</strong>
+          <span style="margin-left:auto"></span>
+          <button id="pwa-min" title="Minimizar" style="border:0;background:#e5e7eb;border-radius:8px;padding:4px 8px">–</button>
+          <button id="pwa-close" title="Cerrar" style="border:0;background:#e11d48;color:#fff;border-radius:8px;padding:4px 8px">×</button>
+        </div>
+        <div id="pwa-body" style="padding:10px 10px 8px 10px"></div>
+        <div id="pwa-cta" style="display:flex;gap:8px;justify-content:flex-end;padding:8px 10px;border-top:1px solid #eef0f2">
+          <button id="pwa-back"  style="display:none;border:0;background:#e5e7eb;border-radius:8px;padding:6px 10px">Atrás</button>
+          <button id="pwa-next"  style="border:0;background:#111;color:#fff;border-radius:8px;padding:6px 10px">Siguiente</button>
+        </div>
+      </div>
+      <button id="pwa-pill" style="
+        display:none; position:absolute; right:0; bottom:0; transform:translate(0,0);
+        border:1px solid #e5e7eb; background:#fff; border-radius:20px;
+        padding:7px 10px; box-shadow:0 6px 16px rgba(0,0,0,.15); font-weight:600;
+      ">Instalar app ⤴</button>
+    `;
+    document.body.appendChild(w);
 
-    // ANDROID: usa el prompt nativo cuando está disponible
+    // Drag (card y píldora)
+    function makeDraggable(el, handle){
+      let sx=0, sy=0, ox=0, oy=0, dragging=false;
+      const onDown = (ev)=>{
+        dragging=true;
+        const r = w.getBoundingClientRect();
+        ox = r.right; oy = r.bottom; // anclaje conservador
+        sx = (ev.touches?ev.touches[0].clientX:ev.clientX);
+        sy = (ev.touches?ev.touches[0].clientY:ev.clientY);
+        ev.preventDefault();
+      };
+      const onMove = (ev)=>{
+        if(!dragging) return;
+        const cx = (ev.touches?ev.touches[0].clientX:ev.clientX);
+        const cy = (ev.touches?ev.touches[0].clientY:ev.clientY);
+        const dx = cx - sx, dy = cy - sy;
+        // mover el contenedor w (right/bottom) sin romper layout
+        const nr = Math.max(6, 14 - dx);
+        const nb = Math.max(6, 14 - dy);
+        w.style.right  = nr + 'px';
+        w.style.bottom = nb + 'px';
+      };
+      const onUp = ()=>{ dragging=false; };
+      (handle||el).addEventListener('mousedown',onDown,{passive:false});
+      (handle||el).addEventListener('touchstart',onDown,{passive:false});
+      window.addEventListener('mousemove',onMove,{passive:false});
+      window.addEventListener('touchmove',onMove,{passive:false});
+      window.addEventListener('mouseup',onUp,{passive:true});
+      window.addEventListener('touchend',onUp,{passive:true});
+    }
+    makeDraggable(w, w.querySelector('#pwa-head'));
+    makeDraggable(w.querySelector('#pwa-pill'));
+
+    // Minimizar / Restaurar / Cerrar
+    const card = w.querySelector('#pwa-card');
+    const pill = w.querySelector('#pwa-pill');
+    w.querySelector('#pwa-min').onclick = ()=>{ card.style.display='none'; pill.style.display='inline-block'; };
+    w.querySelector('#pwa-close').onclick= ()=>{ w.style.display='none'; };
+    pill.onclick = ()=>{ pill.style.display='none'; card.style.display='block'; };
+
+    widget = w;
+    return w;
+  }
+
+  // Helper: detectar versión mayor de iOS (18, 26, etc.)
+function getIOSMajorVersion(){
+  const ua = navigator.userAgent || '';
+  const m = ua.match(/OS (\d+)[._]\d+/i); 
+  return m ? parseInt(m[1], 10) : null;
+}
+
+// Pasos de instalación según plataforma y versión
+function stepsFor(platform){
+  if (platform === 'ios') {
+    const v = getIOSMajorVersion();
+    if (v === 18) {
+      // iOS 18 → botón Compartir directo
+      return [
+        'Paso 1: Presiona "compartir" <strong>Compartir</strong> (cuadrado con flecha hacia arriba).',
+        'Paso 2: Desliza hacia abajo hasta encontrar "agregar a inicio" .',
+        'Paso 3: Confirma el nombre "PIPJM" <strong>“Agregar a Inicio”</strong>.',
+        'Paso 4: Arriba a la derecha presiona agregar <strong>“Agregar”</strong> (botón azul).'
+      ];
+    }
+    if (v >= 26) {
+      // iOS 26+ → menú de tres puntos primero
+      return [
+        'Paso 1: Toca los tres puntos <strong>tres puntos</strong> (⋮).',
+        'Paso 2: Presiona compartir <strong>Compartir</strong>.',
+        'Paso 3: Desliza hacia abajo y presiona "agregar a inicio" <strong>“Agregar a Inicio”</strong>.',
+        'Paso 4: Arriba a la derecha presiona "agregar" <strong>“Agregar”</strong> (botón azul).'
+      ];
+    }
+    // fallback si no reconoce versión → usar pasos estilo iOS 18
+    return [
+      'Paso 1: Toca el botón <strong>Compartir</strong>.',
+      'Paso 2: Desliza hacia abajo.',
+      'Paso 3: Presiona <strong>“Agregar a Inicio”</strong>.',
+      'Paso 4: Presiona <strong>Agregar</strong> arriba a la derecha.'
+    ];
+  }
+    // Android (fallback)
+    return [
+      'Paso 1: Toca el menú ⋮ (arriba derecha).',
+      'Paso 2: Presiona “Agregar a la pantalla de inicio”.',
+      'Paso 3: Confirma en el diálogo.',
+      'Listo: La app quedará en tu pantalla de inicio.'
+    ];
+  }
+
+  // Render de guía compacta (sin overlay, con “Siguiente”)
+  function openGuide(platform){
+    const w = ensureWidget();
+    w.style.display = 'block';
+    const body = w.querySelector('#pwa-body');
+    const back = w.querySelector('#pwa-back');
+    const next = w.querySelector('#pwa-next');
+
+    const steps = stepsFor(platform);
+    let idx = 0;
+    const done = steps.map(()=>false);
+
+    function paint(){
+      body.innerHTML = `
+        <ol style="margin:0;padding-left:18px">
+          ${steps.map((s,i)=>{
+            const ok = done[i], active = (i===idx);
+            const color = ok ? '#059669' : active ? '#111' : '#6b7280';
+            const icon = ok ? '✔︎ ' : '';
+            return `<li style="margin:6px 0;color:${color};${active?'font-weight:700':''}">${icon}${s}</li>`;
+          }).join('')}
+        </ol>
+        ${
+          (platform!=='ios' && deferredPrompt)
+          ? `<div style="margin-top:8px">
+               <button id="pwa-try" style="border:0;background:#2563eb;color:#fff;border-radius:8px;padding:6px 10px">Probar instalar ahora</button>
+             </div>`
+          : ''
+        }
+        <div style="margin-top:6px;color:#6b7280;font-size:12px">Puedes arrastrar este recuadro donde te quede cómodo.</div>
+      `;
+      back.style.display = (idx>0)?'':'none';
+      next.textContent   = (idx<steps.length-1)?'Siguiente':'Listo';
+
+      const tryBtn = body.querySelector('#pwa-try');
+      if (tryBtn){
+        tryBtn.onclick = async ()=>{
+          if (!deferredPrompt) return;
+          try{ deferredPrompt.prompt(); await deferredPrompt.userChoice; }catch(_){}
+          deferredPrompt = null; window.__deferredPrompt = null;
+        };
+      }
+    }
+
+    back.onclick = ()=>{ if(idx>0){ idx--; paint(); } };
+    next.onclick = ()=>{
+      done[idx] = true;
+      if (idx < steps.length-1) { idx++; paint(); }
+      else { w.style.display='none'; }
+    };
+
+    paint();
+  }
+
+  // Click del botón instalar
+  btn.addEventListener('click', async (e)=>{
+    e.preventDefault();
+
+    // Si ya instalada, no hacemos nada (button debería estar oculto)
+    const isStandaloneNow = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || (window.navigator.standalone===true);
+    if (isStandaloneNow) return;
+
+    // Android con prompt disponible → prompt nativo directo
     if (isAndroid && deferredPrompt){
-      try{
-        deferredPrompt.prompt();
-        await deferredPrompt.userChoice; // accepted | dismissed
-      }catch(_){}
-      deferredPrompt = null; // el evento se usa una sola vez
-      return; // no refrescar
+      try{ deferredPrompt.prompt(); await deferredPrompt.userChoice; }catch(_){}
+      deferredPrompt = null; window.__deferredPrompt = null;
+      return;
     }
 
-    // iOS / Navegadores con Web Share API: abre la hoja de compartir sin refrescar
-    if (navigator.share){
-      try{
-        await navigator.share({
-          title: document.title || (cfg.meta?.appName || 'Mi App'),
-          text: cfg.pwa?.install?.shareText || 'Instala la app en tu pantalla de inicio',
-          url: location.href
-        });
-      }catch(_){/* usuario canceló o no hay share */}
-      return; // no refrescar
-    }
-
-    // Fallback universal: guía sin cambiar location
-    alert(
-      cfg.pwa?.install?.fallbackTutorial ||
-      (isIOS
-        ? 'En iPhone/iPad: Toca el botón Compartir y luego "Agregar a Inicio".'
-        : 'En tu navegador: abre el menú y elige "Agregar a la pantalla de inicio".'
-      )
-    );
+    // iOS o Android sin prompt → guía compacta
+    openGuide(isIOS ? 'ios' : 'android');
   });
 
-  // Si se instala (Android), ocultar el botón
+  // Si el navegador dispara “appinstalled”, ocultamos el botón
   window.addEventListener('appinstalled', ()=>{ btn.style.display='none'; });
 })();
 
-/* ───────── Firebase + notifs ───────── */
+/* ───────── Firebase + notifs (permiso/token UI) ───────── */
 (function(){
   if(!window.__CFG_ALLOWED) return;
   const cfg=window.APP_CONFIG; if(!cfg.firebase?.app) return;
@@ -517,182 +800,134 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
 
   if('serviceWorker' in navigator){
     window.addEventListener('load', ()=>{
-      navigator.serviceWorker.register(cfg.firebase.serviceWorkers?.app||'./service-worker.js',{scope:'./'}).then(reg=>{window.appSW=reg}).catch(()=>{});
-      navigator.serviceWorker.register(cfg.firebase.serviceWorkers?.fcm||'./firebase-messaging-sw.js',{scope:'./'}).then(reg=>{window.fcmSW=reg}).catch(()=>{});
+      navigator.serviceWorker.register(cfg.firebase.serviceWorkers?.app||'./service-worker.js',{scope:'./'})
+        .then(reg=>{ window.appSW=reg })
+        .catch(()=>{});
+
+      navigator.serviceWorker.register(cfg.firebase.serviceWorkers?.fcm||'./firebase-messaging-sw.js',{scope:'./'})
+        .then(reg=>{
+          window.fcmSW=reg;
+          // Asegura referencia al SW activo (muy importante para getToken y mensajes)
+          navigator.serviceWorker.ready.then(r => { window.fcmSW = r; });
+        })
+        .catch(()=>{});
     },{once:true});
   }
 
-  // Promesa única para esperar el SW de FCM
-  let __fcmRegPromise = null;
-  function waitForFcmSW() {
-    if (__fcmRegPromise) return __fcmRegPromise;
-    __fcmRegPromise = new Promise(async (resolve, reject) => {
-      try {
-        // Si ya está, resuelve de inmediato
-        if (window.fcmSW) return resolve(window.fcmSW);
-
-        // Si no está, intenta registrarlo (por si el onload aún no corrió)
-        if ('serviceWorker' in navigator) {
-          try {
-            const reg = await navigator.serviceWorker.register(
-              (cfg.firebase.serviceWorkers?.fcm || './firebase-messaging-sw.js'),
-              { scope: './' }
-            );
-            window.fcmSW = reg;
-            return resolve(reg);
-          } catch (e) {
-            // Si falla, espera un poco a que el registro “oficial” lo pueble
-          }
+  let __fcmRegPromise=null;
+  function waitForFcmSW(){
+    if(__fcmRegPromise) return __fcmRegPromise;
+    __fcmRegPromise = new Promise(async (resolve,reject)=>{
+      try{
+        if(window.fcmSW) return resolve(window.fcmSW);
+        if('serviceWorker' in navigator){
+          try{
+            const reg = await navigator.serviceWorker.register((cfg.firebase.serviceWorkers?.fcm || './firebase-messaging-sw.js'),{scope:'./'});
+            window.fcmSW=reg; return resolve(reg);
+          }catch(e){}
         }
-
-        // Poll corto (hasta ~1.5s) por si el registro llega por el listener de load
-        const started = Date.now();
-        const tick = () => {
-          if (window.fcmSW) return resolve(window.fcmSW);
-          if (Date.now() - started > 1500) return reject(new Error('FCM SW no disponible'));
-          setTimeout(tick, 100);
-        };
-        tick();
-      } catch (err) {
-        reject(err);
-      }
+        const start=Date.now();
+        (function poll(){
+          if(window.fcmSW) return resolve(window.fcmSW);
+          if(Date.now()-start>1500) return reject(new Error('FCM SW no disponible'));
+          setTimeout(poll,100);
+        })();
+      }catch(err){ reject(err); }
     });
     return __fcmRegPromise;
   }
 
-  // Promesa única de token (evita dobles)
-  let __fcmTokenPromise = null;
-
+  let __fcmTokenPromise=null;
   async function guardarTokenFCM(token){
-    try{ if(!window.db) return; const ua=navigator.userAgent||''; const ts=new Date().toISOString();
+    try{
+      if(!window.db) return;
+      const ua=navigator.userAgent||''; const ts=new Date().toISOString();
       await window.db.collection(cfg.firebase.firestore?.tokensCollection||'fcmTokens').doc(token).set({token,ua,ts},{merge:true});
     }catch(e){ console.error('Error guardando token FCM:',e); }
   }
   async function obtenerToken(){
-    if (!messaging) return null;
-    if (!('Notification' in window)) return null;
-    if (Notification.permission !== 'granted') return null;
+    if(!messaging) return null;
+    if(!('Notification' in window)) return null;
+    if(Notification.permission!=='granted') return null;
+    if(__fcmTokenPromise) return __fcmTokenPromise;
 
-    // Si ya hay una petición en curso, reutilízala
-    if (__fcmTokenPromise) return __fcmTokenPromise;
-
-    __fcmTokenPromise = (async () => {
-      try {
-        // 1) Espera SIEMPRE el SW de FCM (no usar appSW como fallback)
-        const fcmReg = await waitForFcmSW();
-
-        // 2) Pide el token siempre contra ese registration
-        const opts = {
-          vapidKey: cfg.firebase.vapidPublicKey,
-          serviceWorkerRegistration: fcmReg
-        };
+    __fcmTokenPromise=(async()=>{
+      try{
+        const fcmReg=await waitForFcmSW();
+        const opts={ vapidKey: cfg.firebase.vapidPublicKey, serviceWorkerRegistration: fcmReg };
         const token = await messaging.getToken(opts);
-
-        // 3) Guarda solo si cambia (opcional)
-        if (token && cfg.firebase.firestore?.enabled !== false) {
+        if(token && cfg.firebase.firestore?.enabled !== false){
           const prev = localStorage.getItem('fcm_token');
-          if (token !== prev) {
-            await guardarTokenFCM(token);
-            localStorage.setItem('fcm_token', token);
-          }
+          if(token!==prev){ await guardarTokenFCM(token); localStorage.setItem('fcm_token', token); }
         }
         return token || null;
-      } catch (e) {
-        console.error('getToken FCM:', e);
-        return null;
-      } finally {
-        // Permite nuevas peticiones solo después de resolver/rechazar
-        __fcmTokenPromise = null;
-      }
+      }catch(e){ console.error('getToken FCM:',e); return null; }
+      finally{ __fcmTokenPromise=null; }
     })();
-
     return __fcmTokenPromise;
   }
-
-  // Comprueba si ya hay token válido; si no, intenta obtenerlo
   async function hasValidToken(){
     try{
-      const prev = localStorage.getItem('fcm_token');
-      if (prev && typeof prev === 'string' && prev.length > 10) return prev;
-      const t = await obtenerToken();
-      return t || null;
-    }catch(_){
-      return null;
-    }
+      const prev=localStorage.getItem('fcm_token');
+      if(prev && prev.length>10) return prev;
+      const t=await obtenerToken();
+      return t||null;
+    }catch{ return null; }
   }
 
   const nb = $('#'+(cfg.nav?.notifButton?.id||'btn-notifs'));
-  if (!nb) return;
+  if(!nb) return;
 
-  // ¿Está instalada (standalone)?
   const isStandalone =
     (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
     (window.navigator.standalone === true);
 
-  if (!isStandalone) {
-    // En navegador normal: oculto
-    nb.style.display = 'none';
-    return;
-  }
-
-  // ✅ En PWA instalada: muéstralo explícitamente
-  nb.style.display = '';
-  nb.style.pointerEvents = 'auto'; // opcional
+  nb.style.display = isStandalone ? '' : 'none';
+  nb.style.pointerEvents='auto';
 
   async function setState(){
     const labels = cfg.nav?.notifButton?.labels || {};
-    const p = (typeof Notification !== 'undefined') ? Notification.permission : 'default';
-    if (p === 'granted'){
+    const p = (typeof Notification!=='undefined') ? Notification.permission : 'default';
+    if (p==='granted'){
       const tok = await hasValidToken();
-      if (tok){
-        nb.classList.add('ok');
-        nb.textContent = labels.ok || '✅ NOTIFICACIONES';
-      } else {
-        nb.classList.remove('ok');
-        nb.textContent = labels.noToken || '⚠️ ACTIVAR NOTIFICACIONES';
-      }
-    } else if (p === 'denied'){
-      nb.classList.remove('ok');
-      nb.textContent = labels.denied || '🚫 NOTIFICACIONES';
+      if (tok){ nb.classList.add('ok'); nb.textContent = labels.ok || '✅ NOTIFICACIONES'; }
+      else { nb.classList.remove('ok'); nb.textContent = labels.noToken || '⚠️ ACTIVAR NOTIFICACIONES'; }
+    } else if (p==='denied'){
+      nb.classList.remove('ok'); nb.textContent = labels.denied || '🚫 NOTIFICACIONES';
     } else {
-      nb.classList.remove('ok');
-      nb.textContent = labels.default || 'NOTIFICACIONES';
+      nb.classList.remove('ok'); nb.textContent = labels.default || 'NOTIFICACIONES';
     }
   }
-
   setState();
 
   nb.addEventListener('click', async (e)=>{
     e.preventDefault();
-    if (typeof Notification === 'undefined'){
-      alert('Este dispositivo no soporta notificaciones.');
-      return;
-    }
-    if (Notification.permission === 'granted'){
-      nb.classList.add('loading');
-      nb.textContent = '⏳ NOTIFICACIONES';
-      try{
-        await obtenerToken();
-        await setState();
-      } finally {
-        nb.classList.remove('loading');
-      }
-      return;
-    }
-    nb.classList.add('loading');
-    nb.textContent = '⏳ NOTIFICACIONES';
+    if (typeof Notification==='undefined'){ alert('Este dispositivo no soporta notificaciones.'); return; }
+    nb.classList.add('loading'); nb.textContent='⏳ NOTIFICACIONES';
     try{
-      const perm = await Notification.requestPermission();
-      if (perm === 'granted'){
-        await obtenerToken();
-      }
+      const perm = (Notification.permission==='granted')?'granted':await Notification.requestPermission();
+      if(perm==='granted') await obtenerToken();
       await setState();
-    } finally {
-      nb.classList.remove('loading');
-    }
+    } finally { nb.classList.remove('loading'); }
   });
 
-  // (Opcional) si cambia el display-mode, actualiza visibilidad
+  if(messaging){
+    // 📥 Primer plano: guarda TODAS las notificaciones en la bandeja
+    messaging.onMessage((payload)=>{
+      try{
+        const d = payload?.data || {};
+        // comunicamos al módulo de bandeja mediante evento global
+        window.dispatchEvent(new CustomEvent('app:notifIncoming',{ detail:{
+          title: d.title || payload?.notification?.title || 'Notificación',
+          body:  d.body  || payload?.notification?.body  || '',
+          date:  d.date  || '',
+          image: d.image || '',
+          link:  d.link  || ''
+        }}));
+      }catch(e){ console.error('onMessage error',e); }
+    });
+  }
+
   if (window.matchMedia) {
     const mq = window.matchMedia('(display-mode: standalone)');
     mq.addEventListener?.('change', () => {
@@ -707,7 +942,15 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
   if(!window.__CFG_ALLOWED) return;
   const cfg=window.APP_CONFIG;
   const logo=$('#floating-logo'); if(!logo) return;
-  logo.src = cfg.floatingLogo?.src || cfg.assets?.logoRotating || '';
+
+  // Asegura SRC desde config y oculta si falla para que no se vea el ALT
+  const src = cfg.floatingLogo?.src || cfg.assets?.logoRotating || '';
+  if(src){
+    logo.src = src;
+    logo.onerror = ()=>{ logo.style.display='none'; };
+  }else{
+    logo.style.display='none';
+  }
   const p=cfg.floatingLogo?.position||{};
   if(p.bottom) logo.style.bottom=p.bottom;
   if(p.left)   logo.style.left=p.left;
@@ -734,19 +977,15 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
     return normalizePayload(raw);
   }
 
-  // Acepta DD/MM/AAAA o YYYY-MM-DD → devuelve YYYYMMDD (para embed)
   function toEmbedDate(s){
     if (!s) return null;
     const a = s.trim();
-    // YYYY-MM-DD
     let m = a.match(/^(\d{4})-(\d{2})-(\d{2})$/);
     if (m) return `${m[1]}${m[2]}${m[3]}`;
-    // DD/MM/AAAA
     m = a.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
     if (m) return `${m[3]}${m[2]}${m[1]}`;
     return null;
   }
-
   function normalizePayload(p){
     const dYmd = toEmbedDate(p.date);
     return {
@@ -803,7 +1042,6 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
     if (payload.ymd && cfg.calendars?.google?.calendarId){
       const calId = encodeURIComponent(cfg.calendars.google.calendarId);
       const tz    = encodeURIComponent((cfg.ics?.timeZone || 'America/Puerto_Rico'));
-      // Vista agenda “del día”: dates=YYYYMMDD/YYYYMMDD
       const src = `https://calendar.google.com/calendar/embed?src=${calId}&ctz=${tz}&mode=AGENDA&showNav=0&showDate=0&showPrint=0&showTabs=0&showCalendars=0&showTz=0&wkst=1&bgcolor=%23ffffff&dates=${payload.ymd}/${payload.ymd}`;
       calendar = `
         <div style="margin-top:14px">
@@ -823,12 +1061,11 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
     ov.style.display = 'flex';
     $('#notif-close', ov)?.addEventListener('click', ()=>{
       ov.style.display = 'none';
-      // Limpia el hash para “volver” a la app
       history.replaceState(null, '', location.pathname + location.search);
     }, { once:true });
   }
 
-  async function maybeShowFromHash(){
+  function maybeShowFromHash(){
     const p = parseHashNotif();
     if (!p) return;
     renderNotifView(p);
@@ -837,3 +1074,232 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
   window.addEventListener('hashchange', maybeShowFromHash);
   window.addEventListener('load',       maybeShowFromHash, { once:true });
 })();
+
+/* ───────── Bandeja interna + badge (campanita SOLO PWA) ───────── */
+(function(){
+  if(!window.__CFG_ALLOWED) return;
+
+  const cfg = window.APP_CONFIG || {};
+  const inboxCfg = cfg.inbox || { enabled: true, storageKey:'notifs', maxItems:200, badgeMax:9,
+    ui:{ title:'Notificaciones', markAllLabel:'Marcar leídas', closeLabel:'Cerrar', openLabel:'Abrir', deleteLabel:'Borrar', emptyText:'Sin notificaciones' }
+  };
+  if (inboxCfg.enabled === false) return;
+
+  // Detecta PWA instalada (la UI solo aparece ahí)
+  const isStandalone =
+    (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
+    (window.navigator.standalone === true);
+
+  // === Storage (activo SIEMPRE, para que entren notifs aun sin UI)
+  const KEY = inboxCfg.storageKey || 'notifs';
+  const MAX = +inboxCfg.maxItems > 0 ? +inboxCfg.maxItems : 200;
+
+  const load = () => { try { return JSON.parse(localStorage.getItem(KEY)||'[]'); } catch { return []; } };
+  const save = (list) => { try { localStorage.setItem(KEY, JSON.stringify(list.slice(0, MAX))); } catch {} };
+  const add  = (n) => {
+    const list = load();
+    const item = {
+      id:   n.id   || (Date.now()+'-'+Math.random().toString(36).slice(2,8)),
+      ts:   +n.ts  || Date.now(),
+      title: String(n.title||'Notificación').slice(0,140),
+      body:  String(n.body||''),
+      date:  String(n.date||''),
+      image: n.image||'',
+      link:  n.link ||'',
+      read:  !!n.read
+    };
+    // evita duplicados exactos recientes (5 min)
+    const five = Date.now()-5*60*1000;
+    const dup = list.find(x => x.ts>five && x.title===item.title && x.body===item.body);
+    if (!dup) list.unshift(item);
+    save(list);
+    return item;
+  };
+  const markAllRead = ()=>{ const a=load(); a.forEach(x=>x.read=true); save(a); return a; };
+  const delById     = (id)=>{ const a=load().filter(x=>x.id!==id); save(a); return a; };
+
+  // === UI: campana flotante + badge (SOLO si es standalone)
+  let bell=null, badge=null, panel=null;
+
+  if (isStandalone) {
+    bell = document.createElement('button');
+    bell.id='notif-bell';
+    bell.setAttribute('aria-label','Bandeja de notificaciones');
+    bell.innerHTML='🔔';
+    bell.style.cssText='position:fixed;right:16px;bottom:16px;width:52px;height:52px;border-radius:999px;border:0;background:#111;color:#fff;font-size:22px;box-shadow:0 10px 30px rgba(0,0,0,.25);z-index:100002';
+    document.body.appendChild(bell);
+
+    badge = document.createElement('span');
+    badge.id='notif-badge';
+    badge.style.cssText='position:absolute;top:-6px;right:-4px;background:#ef4444;color:#fff;border-radius:999px;padding:2px 7px;font:700 11px system-ui;line-height:1;display:none';
+    bell.appendChild(badge);
+
+    panel = document.createElement('div');
+    panel.id = 'notif-panel';
+    panel.style.cssText = 'position:fixed;bottom:76px;right:16px;width:min(92vw,420px);max-height:70vh;overflow:auto;background:#fff;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.2);display:none;z-index:100001';
+    panel.innerHTML = `
+      <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid #eee;position:sticky;top:0;background:#fff;border-top-left-radius:12px;border-top-right-radius:12px">
+        <strong style="font:700 14px system-ui">${inboxCfg.ui?.title||'Notificaciones'}</strong>
+        <span style="margin-left:auto"></span>
+        <button id="notif-markall" style="background:#111;color:#fff;border:0;border-radius:8px;padding:6px 10px">${inboxCfg.ui?.markAllLabel||'Marcar leídas'}</button>
+        <button id="notif-closep" style="background:#6b7280;color:#fff;border:0;border-radius:8px;padding:6px 10px">${inboxCfg.ui?.closeLabel||'Cerrar'}</button>
+      </div>
+      <div id="notif-list" style="padding:8px 0"></div>
+    `;
+    document.body.appendChild(panel);
+
+    const openPanel = ()=>{ render(); panel.style.display='block'; };
+    const closePanel= ()=>{ panel.style.display='none'; };
+
+    bell.addEventListener('click', ()=>{ panel.style.display==='block'?closePanel():openPanel(); });
+    document.getElementById('notif-markall')?.addEventListener('click', ()=>{ save(markAllRead()); render(); updateBadge(); });
+    document.getElementById('notif-closep')?.addEventListener('click', closePanel);
+  }
+
+  function esc(s){ return String(s).replace(/[&<>"]/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;' }[c])); }
+
+  function render(){
+    const list = load();
+    const box  = document.getElementById('notif-list');
+    if (!box){ return; } // si no hay UI (no standalone), no renderizamos
+    box.innerHTML = '';
+    if (!list.length) {
+      box.innerHTML = `<div style="padding:14px;color:#6b7280">${inboxCfg.ui?.emptyText||'Sin notificaciones'}</div>`;
+      return;
+    }
+    for (const n of list) {
+      const row = document.createElement('div');
+      row.style.cssText = `padding:10px 12px;border-bottom:1px solid #eee;${n.read?'opacity:.65':''}`;
+      row.innerHTML = `
+        <div style="display:flex;gap:8px;align-items:baseline">
+          <strong style="font:700 14px system-ui;flex:1">${esc(n.title)}</strong>
+          <small style="color:#6b7280">${new Date(n.ts).toLocaleString()}</small>
+        </div>
+        <div style="font:400 13px/1.5 system-ui;white-space:pre-wrap;margin:4px 0 8px">${esc(n.body)}</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button data-id="${n.id}" data-act="open" style="background:#2563eb;color:#fff;border:0;border-radius:8px;padding:6px 10px">${inboxCfg.ui?.openLabel||'Abrir'}</button>
+          <button data-id="${n.id}" data-act="del"  style="background:#dc2626;color:#fff;border:0;border-radius:8px;padding:6px 10px">${inboxCfg.ui?.deleteLabel||'Borrar'}</button>
+        </div>`;
+      box.appendChild(row);
+    }
+  }
+
+  // Badge (funciona aun sin UI; solo actualiza si existe)
+  const BADGE_MAX = +inboxCfg.badgeMax > 0 ? +inboxCfg.badgeMax : 9;
+  function updateBadge(){
+    if (!badge) return;
+    const c = load().filter(x=>!x.read).length;
+    if (c>0){ badge.textContent = c > BADGE_MAX ? (BADGE_MAX + '+') : String(c); badge.style.display=''; }
+    else { badge.style.display='none'; }
+  }
+
+  // Mensajes del SW → guarda nuevas (SIEMPRE activos)
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('message', (ev)=>{
+      const d = ev.data || {};
+      if (d.type === 'notif:new' && d.payload) {
+        add(d.payload);
+        updateBadge();
+      }
+      if (d.type === 'notif:open' && typeof d.url === 'string') {
+        try{
+          const u = new URL(d.url, location.origin);
+          const q = new URLSearchParams(u.hash.split('?')[1]||'');
+          const t = decodeURIComponent(q.get('title') || '');
+          const b = decodeURIComponent(q.get('body')  || '');
+          const list = load(); let changed = false;
+          for (const x of list) {
+            if (!x.read && x.title===t && x.body===b) { x.read = true; changed = true; }
+          }
+          if (changed) save(list);
+          updateBadge();
+        }catch(_){}
+      }
+    });
+  }
+
+  // Primer plano (evento que manda el módulo FCM UI) — SIEMPRE activo
+  window.addEventListener('app:notifIncoming',(e)=>{
+    add(e.detail||{});
+    updateBadge();
+  });
+
+  // Abrir item → hoja (solo si existe UI)
+  if (isStandalone) {
+    panel.addEventListener('click', (e)=>{
+      const b = e.target.closest('button'); if(!b) return;
+      const id = b.getAttribute('data-id');
+      const act = b.getAttribute('data-act');
+
+      if (act === 'open') {
+        const it = load().find(x=>x.id===id);
+        if (it) {
+          const qs = new URLSearchParams();
+          qs.set('title', it.title);
+          qs.set('body',  it.body);
+          if (it.date)  qs.set('date',  it.date);
+          if (it.image) qs.set('image', it.image);
+          if (it.link)  qs.set('link',  it.link);
+          location.hash = '/notif?'+qs.toString();
+
+          // marcar leída
+          const list = load();
+          const i = list.findIndex(x=>x.id===id);
+          if (i>=0) { list[i].read = true; save(list); }
+          updateBadge();
+        }
+        panel.style.display='none';
+      }
+      if (act === 'del') {
+        save(delById(id));
+        render();
+        updateBadge();
+      }
+    });
+  }
+
+  // Arranque
+  updateBadge();
+})();
+/* ───────── Extra: auto-link en notificaciones ───────── */
+(function(){
+  if(!window.__CFG_ALLOWED) return;
+
+  // Convierte fechas y URLs en <a> clickeables
+  function autoLink(text){
+    if(!text) return '';
+    let out = String(text);
+
+    // Detecta URLs (http/https)
+    const urlRegex = /(https?:\/\/[^\s]+)/gi;
+    out = out.replace(urlRegex, u=>{
+      return `<a href="${u}" target="_blank" rel="noopener" style="color:#2563eb;text-decoration:underline">${u}</a>`;
+    });
+
+    // Detecta fechas en formato YYYY-MM-DD
+    const dateRegex = /\b(\d{4}-\d{2}-\d{2})\b/g;
+    out = out.replace(dateRegex, d=>{
+      if(window.APP_CONFIG?.calendars?.google?.calendarId){
+        const calId = encodeURIComponent(window.APP_CONFIG.calendars.google.calendarId);
+        const tz    = encodeURIComponent(window.APP_CONFIG.ics?.timeZone || 'America/Puerto_Rico');
+        const dPlain = d.replace(/-/g,'');
+        const calUrl = `https://calendar.google.com/calendar/embed?src=${calId}&ctz=${tz}&dates=${dPlain}/${dPlain}`;
+        return `<a href="${calUrl}" target="_blank" rel="noopener" style="color:#16a34a;text-decoration:underline">${d}</a>`;
+      }
+      return d;
+    });
+
+    return out;
+  }
+
+  // Hook: cuando mostramos la notificación en overlay
+  window.renderNotifView = (function(orig){
+    return function(payload){
+      // Escapar contenido y aplicar autoLink
+      if(payload && payload.body){
+        payload.body = autoLink(payload.body);
+      }
+      orig(payload);
+    };
+  })(window.renderNotifView);
+})(); // ← importante punto y coma final
