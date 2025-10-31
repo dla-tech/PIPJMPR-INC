@@ -1,13 +1,15 @@
 /* eslint-disable no-undef */
-/* === Firebase Messaging Service Worker (PWA) ================================
-  importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js');
+// === Service Worker para Firebase Cloud Messaging (FCM) ===
+importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js');
 
-/* --- Control SW rápido --- */
-self.addEventListener('install', (e)=> self.skipWaiting());
-self.addEventListener('activate', (e)=> e.waitUntil(self.clients.claim()));
+// Tomar control lo antes posible
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', (event) => {
+  event.waitUntil(self.clients.claim());
+});
 
-/* --- Tu proyecto Firebase --- */
+// Config de tu proyecto
 firebase.initializeApp({
   apiKey: "AIzaSyAHQjMp8y9uaxAd0nnmCcVaXWSbij3cvEo",
   authDomain: "miappiglesia-c703a.firebaseapp.com",
@@ -18,77 +20,24 @@ firebase.initializeApp({
 });
 const messaging = firebase.messaging();
 
-/* --- Iconos por defecto --- */
+// Iconos por defecto
 const DEFAULT_ICON  = "icons/icon-192.png";
 const DEFAULT_BADGE = "icons/icon-72.png";
 
-/* ============================================================================
-   IndexedDB para guardar notificaciones
-============================================================================ */
-const DB_NAME = 'app-notifs';
-const DB_STORE = 'notifs';
-const DB_VER = 1;
-
-function idbOpen(){
-  return new Promise((resolve,reject)=>{
-    const req = indexedDB.open(DB_NAME, DB_VER);
-    req.onupgradeneeded = (ev)=>{
-      const db = ev.target.result;
-      if(!db.objectStoreNames.contains(DB_STORE)){
-        const store = db.createObjectStore(DB_STORE, { keyPath: 'id' });
-        store.createIndex('ts','ts',{unique:false});
-        store.createIndex('read','read',{unique:false});
-      }
-    };
-    req.onsuccess = ()=>resolve(req.result);
-    req.onerror   = ()=>reject(req.error);
-  });
-}
-async function dbAdd(item){
-  const db = await idbOpen();
-  return new Promise((resolve,reject)=>{
-    const tx = db.transaction(DB_STORE,'readwrite');
-    tx.oncomplete = ()=>resolve(true);
-    tx.onerror    = ()=>reject(tx.error);
-    tx.objectStore(DB_STORE).put(item);
-  });
-}
-async function dbGetAll(){
-  const db = await idbOpen();
-  return new Promise((resolve,reject)=>{
-    const tx = db.transaction(DB_STORE,'readonly');
-    const req = tx.objectStore(DB_STORE).getAll();
-    req.onsuccess = ()=>resolve(req.result||[]);
-    req.onerror   = ()=>reject(req.error);
-  });
-}
-async function dbMarkReadByContent(title, body){
-  const db = await idbOpen();
-  return new Promise((resolve,reject)=>{
-    const tx = db.transaction(DB_STORE,'readwrite');
-    const store = tx.objectStore(DB_STORE);
-    const all = store.getAll();
-    all.onsuccess = ()=>{
-      const list = all.result||[];
-      list.forEach(n=>{
-        if(!n.read && n.title===title && n.body===body){
-          n.read = true; store.put(n);
-        }
-      });
-    };
-    tx.oncomplete = ()=>resolve(true);
-    tx.onerror    = ()=>reject(tx.error);
-  });
+// --- Helper: avisar a las ventanas (PWA) ---
+async function broadcastToClients(msg){
+  try{
+    const cs = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const c of cs) { try { c.postMessage(msg); } catch(_){} }
+  }catch(_){}
 }
 
-/* ============================================================================
-   Utilidades
-============================================================================ */
+// --- Helpers: extraer patrones del body y construir URL de overlay ---
 function extractPatterns(text){
   const t = String(text || '');
-  const mDate = t.match(/#\((\d{4}-\d{2}-\d{2})\)/);
-  const mImg  = t.match(/#img\(([^)]+)\)/i);
-  const mLink = t.match(/#link\(([^)]+)\)/i);
+  const mDate = t.match(/#\((\d{4}-\d{2}-\d{2})\)/);   // #(YYYY-MM-DD)
+  const mImg  = t.match(/#img\(([^)]+)\)/i);          // #img(URL)
+  const mLink = t.match(/#link\(([^)]+)\)/i);         // #link(URL)
   return {
     date:  mDate ? mDate[1] : '',
     image: mImg  ? mImg[1]  : '',
@@ -105,122 +54,120 @@ function buildNotifUrl(title, body, extra){
   });
   return '/#/notif?' + q.toString();
 }
+
+// --- Util: construir payload “ligero” para la bandeja interna ---
 function makeInboxPayload({title, body, date, image, link}){
   return {
-    id: (Date.now()+'-'+Math.random().toString(36).slice(2,8)),
-    ts: Date.now(),
+    // id y ts también los puede generar el front; aquí enviamos datos mínimos
     title: String(title || 'Notificación').slice(0,140),
     body:  String(body || ''),
     date:  date  || '',
     image: image || '',
-    link:  link  || '',
-    read:  false
+    link:  link  || ''
   };
 }
-async function broadcastToClients(msg){
-  try{
-    const cs = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-    cs.forEach(c=>{ try{ c.postMessage(msg); }catch(_){ } });
-  }catch(_){}
-}
 
-/* ============================================================================
-   Handler principal: background messages FCM
-============================================================================ */
-messaging.onBackgroundMessage(async (payload) => {
-  const data  = payload?.data || {};
+// --- Mensajes en background ---
+messaging.onBackgroundMessage((payload) => {
+  const data = payload?.data || {};
   const notif = payload?.notification || null;
 
-  let title, body, meta = {};
   if (notif) {
-    title = notif.title || 'Notificación';
-    body  = notif.body  || '';
+    // Notificación “clásica” enviada por FCM (dejamos que el navegador la muestre).
+    const title = notif.title || 'Notificación';
+    const body  = notif.body  || '';
     const found = extractPatterns(body);
-    meta = {
+
+    const meta = {
       date:  data.date  || found.date  || '',
       image: data.image || found.image || '',
       link:  data.link  || found.link  || ''
     };
-  } else {
-    title = data.title || 'Notificación';
-    body  = data.body  || '';
-    const found = extractPatterns(body);
-    meta = {
-      date:  data.date  || found.date  || '',
-      image: data.image || found.image || '',
-      link:  data.link  || found.link  || ''
-    };
+    const url  = data.url || buildNotifUrl(title, body, meta);
+
+    // Avisar al front para que la guarde en la bandeja
+    broadcastToClients({
+      type: 'notif:new',
+      payload: makeInboxPayload({ title, body, date: meta.date, image: meta.image, link: meta.link })
+    });
+
+    // No hacemos showNotification para evitar duplicados.
+    return;
   }
 
+  // Data-only: el SW debe crear la notificación
+  const title = data.title || 'Notificación';
+  const body  = data.body  || '';
+  const found = extractPatterns(body);
+  const meta = {
+    date:  data.date  || found.date  || '',
+    image: data.image || found.image || '',
+    link:  data.link  || found.link  || ''
+  };
   const url = data.url || buildNotifUrl(title, body, meta);
-  const item = makeInboxPayload({ title, body, date: meta.date, image: meta.image, link: meta.link });
 
-  // Guardar en IndexedDB
-  try{ await dbAdd(item); }catch(_){}
-
-  // Notificar a las ventanas abiertas (PWA)
-  broadcastToClients({ type: 'notif:new', payload: item });
-
-  // Mostrar notificación del sistema SOLO si no la mostró FCM (data-only)
-  if (!notif) {
-    const options = {
+  const options = {
+    body,
+    icon:  data.icon  || DEFAULT_ICON,
+    badge: data.badge || DEFAULT_BADGE,
+    image: meta.image || undefined,
+    vibrate: [200, 100, 200],
+    data: {
+      title,
       body,
-      icon:  data.icon  || DEFAULT_ICON,
-      badge: data.badge || DEFAULT_BADGE,
-      image: meta.image || undefined,
-      vibrate: [200, 100, 200],
-      tag: 'pipjm-notif',
-      renotify: false,
-      data: { title, body, date: meta.date, image: meta.image, link: meta.link, url }
-    };
-    try{ await self.registration.showNotification(title, options); }catch(_){}
-  }
+      date:  meta.date,
+      image: meta.image,
+      link:  meta.link,
+      url
+    }
+  };
+
+  // Mostrar notificación del sistema
+  self.registration.showNotification(title, options);
+
+  // Avisar al front para que registre en la bandeja
+  broadcastToClients({
+    type: 'notif:new',
+    payload: makeInboxPayload({ title, body, date: meta.date, image: meta.image, link: meta.link })
+  });
 });
 
-/* ============================================================================
-   Click en la notificación
-============================================================================ */
+// --- Click en la notificación ---
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
 
-  const d = event.notification?.data || {};
-  const targetUrl = d.url || buildNotifUrl(d.title||'Notificación', d.body||'', d);
+  // Usa la URL guardada en data o constrúyela desde title/body
+  let targetUrl = event.notification?.data?.url;
+  if (!targetUrl) {
+    const nTitle = event.notification?.title || 'Notificación';
+    const nBody  = event.notification?.body  || '';
+    const found  = extractPatterns(nBody);
+    targetUrl = buildNotifUrl(nTitle, nBody, found) || '/';
+  }
 
   event.waitUntil((async () => {
-    const all = await self.clients.matchAll({ type:'window', includeUncontrolled:true });
-    for (const c of all){
-      try{
-        if (!c.url.includes(targetUrl) && 'navigate' in c) {
-          await c.navigate(targetUrl);
+    const allClients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    if (allClients.length > 0) {
+      const client = allClients[0];
+      // Navegar si la URL/fragment no coincide
+      try {
+        const needNav = !client.url.includes(targetUrl);
+        if (needNav && 'navigate' in client) {
+          await client.navigate(targetUrl);
         }
-        await c.focus();
-        await dbMarkReadByContent(d.title||'', d.body||'');
-        broadcastToClients({ type:'notif:open', url: targetUrl });
-        return;
-      }catch(_){}
+        await client.focus();
+      } catch(_) {}
+
+      // Avisar al front: marcar como leída en la bandeja
+      broadcastToClients({ type: 'notif:open', url: targetUrl });
+      return;
     }
+
+    // Si no hay ventana, abre una nueva
     if (self.clients.openWindow) {
       await self.clients.openWindow(targetUrl);
-      try{ await dbMarkReadByContent(d.title||'', d.body||''); }catch(_){}
-      setTimeout(()=>broadcastToClients({ type:'notif:open', url: targetUrl }), 500);
+      // Intentar avisar después de un breve tiempo (puede no llegar si no carga la app aún)
+      setTimeout(()=>broadcastToClients({ type: 'notif:open', url: targetUrl }), 500);
     }
   })());
-});
-
-/* ============================================================================
-   Canal de mensajes SW <-> PWA
-============================================================================ */
-self.addEventListener('message', (event)=>{
-  const msg = event.data || {};
-  if (msg && msg.type === 'notif:pull'){
-    event.waitUntil((async ()=>{
-      try{
-        const list = await dbGetAll();
-        list.sort((a,b)=>b.ts-a.ts);
-        event.source?.postMessage({ type:'notif:list', items:list });
-      }catch(_){
-        event.source?.postMessage({ type:'notif:list', items:[] });
-      }
-    })());
-  }
 });
