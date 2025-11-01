@@ -8,24 +8,18 @@ self.addEventListener('fetch', (event) => {
   }
 
   // Solo manejar GET para cachear
-if (req.method !== 'GET') return;  // deja pasar otras (POST/PUT/etc.)
+  if (req.method !== 'GET') return;  // deja pasar otras (POST/PUT/etc.)
 
-// ⚠️ Evita cachear config.js (para que siempre se actualice automáticamente)
-if (req.url.includes('config/config.js')) {
-  event.respondWith(fetch(req)); // siempre pide el archivo nuevo desde la red
-  return;
-}
-
-event.respondWith(
-  fetch(req)
-    .then((resp) => {
-      // cachear solo respuestas exitosas
-      if (resp && resp.status === 200) {
-        const copy = resp.clone();
-        caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
-      }
-      return resp;
-    })
-    .catch(() => caches.match(req))
-);
+  event.respondWith(
+    fetch(req)
+      .then((resp) => {
+        // cachear solo respuestas exitosas
+        if (resp && resp.status === 200) {
+          const copy = resp.clone();
+          caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
+        }
+        return resp;
+      })
+      .catch(() => caches.match(req))
+  );
 });
