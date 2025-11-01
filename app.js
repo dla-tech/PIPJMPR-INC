@@ -1375,3 +1375,50 @@ function stepsFor(platform){
     setTimeout(() => overlay.remove(), 250);
   });
 })();
+
+/* ───────── Auto-actualización de config.js (mantiene PWA fresca) ───────── */
+(function(){
+  if(!window.__CFG_ALLOWED) return;
+
+  const CONFIG_URL = 'config/config.js';
+  const CHECK_INTERVAL_MS = 60 * 1000; // 🔁 cada 60 segundos
+
+  async function getConfigSignature() {
+    try {
+      const res = await fetch(CONFIG_URL + '?t=' + Date.now(), { cache: 'no-store' });
+      if (!res.ok) return null;
+      const text = await res.text();
+      // genera hash rápido
+      let hash = 0;
+      for (let i = 0; i < text.length; i++) {
+        hash = (hash + text.charCodeAt(i) * (i + 1)) % 1000000007;
+      }
+      return hash;
+    } catch {
+      return null;
+    }
+  }
+
+  async function checkForUpdates() {
+    const newSig = await getConfigSignature();
+    if (!newSig) return;
+    const oldSig = localStorage.getItem('cfg_sig');
+    if (oldSig && oldSig !== String(newSig)) {
+      console.log('[PWA] 🔄 Config cambió — recargando app');
+      if ('caches' in window) {
+        const names = await caches.keys();
+        for (const name of names) {
+          if (name.startsWith('app-')) await caches.delete(name);
+        }
+      }
+      localStorage.setItem('cfg_sig', newSig);
+      location.reload(true);
+    } else {
+      localStorage.setItem('cfg_sig', newSig);
+    }
+  }
+
+  // Verifica al inicio y luego cada cierto tiempo
+  checkForUpdates();
+  setInterval(checkForUpdates, CHECK_INTERVAL_MS);
+})();
