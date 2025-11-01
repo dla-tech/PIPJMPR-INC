@@ -84,9 +84,9 @@ window.APP_CONFIG = {
   /* ───────── Bandeja interna de notificaciones (campanita) ───────── */
   inbox: {
     enabled: true,
-    storageKey: "notifs",   // donde se guardan en localStorage
-    maxItems: 200,          // máximo guardadas
-    badgeMax: 9,            // muestra "9+" cuando excede
+    storageKey: "notifs",
+    maxItems: 200,
+    badgeMax: 9,
     ui: {
       title: "Notificaciones",
       markAllLabel: "Marcar leídas",
@@ -109,24 +109,15 @@ window.APP_CONFIG = {
       "webcal://p158-caldav.icloud.com/published/2/MTYyMzg4NDUwMjAxNjIzOFc_RCw-iCOSeM_LMqkWZcQMuX9sTzZF-PyrU9d06Oy4V0VhxUSZVqCmqzUsygyCHgAllfl2DFW34WcFi8EvPD8"
   },
 
-    /* ───────── ICS (martes/miércoles) ───────── */
+  /* ───────── ICS (martes/miércoles) ───────── */
   ics: {
-    // ⚠️ Usa siempre el enlace RAW de GitHub para que cargue bien
     url: "https://raw.githubusercontent.com/dla-tech/Media-privada/main/calendarios/calendario.ics",
-
-    // Zona horaria en la que se interpretarán los eventos
     timeZone: "America/Puerto_Rico",
-
-    // Etiquetas que se muestran en la web
-    labels: {
-      martesPrefix: "Martes",
-      miercolesPrefix: "Miércoles"
-    },
-
-    // Opciones extra para robustez
-    cacheBuster: true,   // si es true, añade un timestamp al URL para evitar caché
-    fallbackTown: "Maunabo, Puerto Rico" // localidad que se usará si no detecta ninguna
+    labels: { martesPrefix: "Martes", miercolesPrefix: "Miércoles" },
+    cacheBuster: true,
+    fallbackTown: "Maunabo, Puerto Rico"
   },
+
   /* ───────── Promos (JSON externo) ───────── */
   promos: {
     manifestUrl: "https://raw.githubusercontent.com/dla-tech/Media-privada/refs/heads/main/Promo/Promos.json",
@@ -136,7 +127,7 @@ window.APP_CONFIG = {
   /* ───────── YouTube Live ───────── */
   youtube: {
     handle: "@pipjm9752",
-    channelId: "UCIecC8LfuWsK82SnPIjbqGQ" // opcional
+    channelId: "UCIecC8LfuWsK82SnPIjbqGQ"
   },
 
   /* ───────── PWA / install copy ───────── */
@@ -177,6 +168,9 @@ window.APP_CONFIG = {
   /* ───────── Mensajes/otros ───────── */
   messages: {
     globalNotice: { enabled: false },
-    notifDefaults: { image: "https://example.com/fallback.jpg" }
+    notifDefaults: { image: "https://example.com/fallback.jpg" },
+
+    // 🟡 Texto del banner flotante de anuncio (se muestra al entrar)
+    promoText: "📣 ¡Nuevo culto especial este domingo a las 11:00 a.m.! 🙌"
   }
 };
