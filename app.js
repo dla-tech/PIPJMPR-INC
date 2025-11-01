@@ -1304,121 +1304,95 @@ function stepsFor(platform){
   })(window.renderNotifView);
 })(); // ← importante punto y coma 
 
-/* ───────── Banner flotante de anuncio ───────── */
+/* ───────── Banner flotante de anuncio (versión directa y estable) ───────── */
 (function(){
   if(!window.__CFG_ALLOWED) return;
 
-  // 🟡 Texto que activa el banner — se define en config.js dentro de:
-  // messages: { promoText: "Tu texto aquí" }
-  const promoText = (window.APP_CONFIG?.messages?.promoText || '').trim();
-  if(!promoText) return; // si está vacío, no muestra nada
+  // 💬 Aquí escribes tu texto — usa \n para saltos de línea
+  const promoText = `
+    🔔 ¡Atención! Este domingo tendremos culto especial de adoración
+    con la participación de la Sociedad de Jóvenes. ¡Te esperamos!
+  `.trim();
 
-  // Crear overlay oscuro
+  // 🖼️ Imagen opcional (déjalo vacío si no quieres fondo)
+  const promoImage = "https://raw.githubusercontent.com/dla-tech/Media-privada/main/IMG_8023.jpeg";
+
+  // Si no hay texto, no muestra nada
+  if(!promoText) return;
+
+  // Crear fondo general
   const overlay = document.createElement('div');
   overlay.id = 'promo-overlay';
   overlay.style.cssText = `
-    position:fixed;
-    inset:0;
-    z-index:100000;
-    background:rgba(0,0,0,.65);
-    display:flex;
-    align-items:center;
-    justify-content:center;
+    position:fixed; inset:0; z-index:100000;
+    background:rgba(0,0,0,.75);
+    display:flex; align-items:center; justify-content:center;
     padding:20px;
+    animation:fadeIn .3s ease;
   `;
 
-  // Recuadro del anuncio
+  // Crear tarjeta
   const card = document.createElement('div');
   card.style.cssText = `
-    background:#fff;
-    max-width:600px;
-    width:90%;
-    border-radius:14px;
-    box-shadow:0 10px 40px rgba(0,0,0,.4);
-    padding:24px 20px 20px;
     position:relative;
-    text-align:center;
+    background:#fff;
+    max-width:600px; width:90%;
+    border-radius:16px;
+    box-shadow:0 10px 40px rgba(0,0,0,.45);
+    overflow:hidden;
     font:500 18px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Arial;
-    animation:fadeIn .25s ease;
+    text-align:center;
+    color:#111;
   `;
 
-  // Botón para cerrar el anuncio
+  // Fondo de imagen opcional
+  if(promoImage){
+    const bg = document.createElement('img');
+    bg.src = promoImage;
+    bg.alt = "";
+    bg.loading = "lazy";
+    bg.style.cssText = `
+      position:absolute; inset:0;
+      width:100%; height:100%;
+      object-fit:cover;
+      filter:brightness(0.45) blur(1px);
+      z-index:0;
+    `;
+    card.appendChild(bg);
+  }
+
+  // Contenido de texto
+  const textBox = document.createElement('div');
+  textBox.innerHTML = promoText.replace(/\n/g,'<br>');
+  textBox.style.cssText = `
+    position:relative; z-index:1;
+    padding:24px 16px 30px;
+    color:#fff;
+    font-weight:600;
+    text-shadow:0 2px 4px rgba(0,0,0,.4);
+  `;
+
+  // Botón cerrar
   const close = document.createElement('button');
   close.textContent = '✕';
   close.setAttribute('aria-label','Cerrar anuncio');
   close.style.cssText = `
-    position:absolute;
-    top:10px;
-    right:12px;
-    border:0;
-    background:transparent;
-    font-size:26px;
-    font-weight:700;
-    cursor:pointer;
-    color:#444;
+    position:absolute; top:10px; right:12px;
+    border:0; background:rgba(0,0,0,.45);
+    font-size:24px; font-weight:700;
+    color:#fff; border-radius:50%;
+    width:36px; height:36px;
+    cursor:pointer; z-index:2;
+    backdrop-filter:blur(4px);
   `;
 
-  // Texto del anuncio
-  const textBox = document.createElement('div');
-  textBox.innerHTML = promoText.replace(/\n/g, '<br>');
-  textBox.style.cssText = 'margin-top:10px; color:#111;';
+  close.addEventListener('click',()=>{
+    overlay.style.opacity='0';
+    overlay.style.transition='opacity .3s ease';
+    setTimeout(()=>overlay.remove(),300);
+  });
 
-  // Montar estructura
   card.append(close, textBox);
   overlay.appendChild(card);
   document.body.appendChild(overlay);
-
-  // Cerrar con animación suave
-  close.addEventListener('click', () => {
-    overlay.style.opacity = '0';
-    overlay.style.transition = 'opacity .25s ease';
-    setTimeout(() => overlay.remove(), 250);
-  });
-})();
-
-/* ───────── Auto-actualización de config.js (mantiene PWA fresca) ───────── */
-(function(){
-  if(!window.__CFG_ALLOWED) return;
-
-  const CONFIG_URL = 'config/config.js';
-  const CHECK_INTERVAL_MS = 60 * 1000; // 🔁 cada 60 segundos
-
-  async function getConfigSignature() {
-    try {
-      const res = await fetch(CONFIG_URL + '?t=' + Date.now(), { cache: 'no-store' });
-      if (!res.ok) return null;
-      const text = await res.text();
-      // genera hash rápido
-      let hash = 0;
-      for (let i = 0; i < text.length; i++) {
-        hash = (hash + text.charCodeAt(i) * (i + 1)) % 1000000007;
-      }
-      return hash;
-    } catch {
-      return null;
-    }
-  }
-
-  async function checkForUpdates() {
-    const newSig = await getConfigSignature();
-    if (!newSig) return;
-    const oldSig = localStorage.getItem('cfg_sig');
-    if (oldSig && oldSig !== String(newSig)) {
-      console.log('[PWA] 🔄 Config cambió — recargando app');
-      if ('caches' in window) {
-        const names = await caches.keys();
-        for (const name of names) {
-          if (name.startsWith('app-')) await caches.delete(name);
-        }
-      }
-      localStorage.setItem('cfg_sig', newSig);
-      location.reload(true);
-    } else {
-      localStorage.setItem('cfg_sig', newSig);
-    }
-  }
-
-  // Verifica al inicio y luego cada cierto tiempo
-  checkForUpdates();
-  setInterval(checkForUpdates, CHECK_INTERVAL_MS);
 })();
