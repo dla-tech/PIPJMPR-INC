@@ -1302,30 +1302,37 @@ function stepsFor(platform){
       orig(payload);
     };
   })(window.renderNotifView);
-})(); // ← importante punto y coma final
+})(); // ← importante punto y coma 
+
 /* ───────── Banner flotante de anuncio ───────── */
 (function(){
   if(!window.__CFG_ALLOWED) return;
 
-  // Texto que activa el banner: config.messages.promoText
+  // 🟡 Texto que activa el banner — se define en config.js dentro de:
+  // messages: { promoText: "Tu texto aquí" }
   const promoText = (window.APP_CONFIG?.messages?.promoText || '').trim();
   if(!promoText) return; // si está vacío, no muestra nada
 
-  // Crear overlay
+  // Crear overlay oscuro
   const overlay = document.createElement('div');
   overlay.id = 'promo-overlay';
   overlay.style.cssText = `
-    position:fixed; inset:0; z-index:100000;
+    position:fixed;
+    inset:0;
+    z-index:100000;
     background:rgba(0,0,0,.65);
-    display:flex; align-items:center; justify-content:center;
+    display:flex;
+    align-items:center;
+    justify-content:center;
     padding:20px;
   `;
 
-  // Crear recuadro del texto
+  // Recuadro del anuncio
   const card = document.createElement('div');
   card.style.cssText = `
     background:#fff;
-    max-width:600px; width:90%;
+    max-width:600px;
+    width:90%;
     border-radius:14px;
     box-shadow:0 10px 40px rgba(0,0,0,.4);
     padding:24px 20px 20px;
@@ -1335,28 +1342,36 @@ function stepsFor(platform){
     animation:fadeIn .25s ease;
   `;
 
-  // Botón de cerrar
+  // Botón para cerrar el anuncio
   const close = document.createElement('button');
   close.textContent = '✕';
   close.setAttribute('aria-label','Cerrar anuncio');
   close.style.cssText = `
-    position:absolute; top:10px; right:12px;
-    border:0; background:transparent;
-    font-size:26px; font-weight:700; cursor:pointer;
+    position:absolute;
+    top:10px;
+    right:12px;
+    border:0;
+    background:transparent;
+    font-size:26px;
+    font-weight:700;
+    cursor:pointer;
     color:#444;
   `;
 
+  // Texto del anuncio
   const textBox = document.createElement('div');
-  textBox.innerHTML = promoText.replace(/\n/g,'<br>');
-  textBox.style.cssText = 'margin-top:10px;color:#111;';
+  textBox.innerHTML = promoText.replace(/\n/g, '<br>');
+  textBox.style.cssText = 'margin-top:10px; color:#111;';
 
-  card.append(close,textBox);
+  // Montar estructura
+  card.append(close, textBox);
   overlay.appendChild(card);
   document.body.appendChild(overlay);
 
-  close.addEventListener('click',()=>{
-    overlay.style.opacity='0';
-    overlay.style.transition='opacity .25s ease';
-    setTimeout(()=>overlay.remove(),250);
+  // Cerrar con animación suave
+  close.addEventListener('click', () => {
+    overlay.style.opacity = '0';
+    overlay.style.transition = 'opacity .25s ease';
+    setTimeout(() => overlay.remove(), 250);
   });
 })();
