@@ -171,6 +171,6 @@ window.APP_CONFIG = {
     notifDefaults: { image: "https://example.com/fallback.jpg" },
 
     // 🟡 Texto del banner flotante de anuncio (se muestra al entrar)
-    promoText: "📣 ¡Nuevo culto especial este domingo a las 11:00 a.m.! 🙌"
+    promoText: "📣 Ayuno de caballeros y Jovenes diciembre 5 al 7 separa la fecha🙌🏽"
   }
 };
