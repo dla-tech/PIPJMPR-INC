@@ -1310,8 +1310,7 @@ function stepsFor(platform){
 
   // 💬 Aquí escribes tu texto — usa \n para saltos de línea
   const promoText = `
-    🔔 ¡Atención! Este domingo tendremos culto especial de adoración
-    con la participación de la Sociedad de Jóvenes. ¡Te esperamos!
+    📣 ¡Ayuno de Caballeros y Jovenes! diciembre 5 al 7 del 2025, separa la fecha🙌🏽
   `.trim();
 
   // 🖼️ Imagen opcional (déjalo vacío si no quieres fondo)
