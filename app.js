@@ -1303,3 +1303,60 @@ function stepsFor(platform){
     };
   })(window.renderNotifView);
 })(); // ← importante punto y coma final
+/* ───────── Banner flotante de anuncio ───────── */
+(function(){
+  if(!window.__CFG_ALLOWED) return;
+
+  // Texto que activa el banner: config.messages.promoText
+  const promoText = (window.APP_CONFIG?.messages?.promoText || '').trim();
+  if(!promoText) return; // si está vacío, no muestra nada
+
+  // Crear overlay
+  const overlay = document.createElement('div');
+  overlay.id = 'promo-overlay';
+  overlay.style.cssText = `
+    position:fixed; inset:0; z-index:100000;
+    background:rgba(0,0,0,.65);
+    display:flex; align-items:center; justify-content:center;
+    padding:20px;
+  `;
+
+  // Crear recuadro del texto
+  const card = document.createElement('div');
+  card.style.cssText = `
+    background:#fff;
+    max-width:600px; width:90%;
+    border-radius:14px;
+    box-shadow:0 10px 40px rgba(0,0,0,.4);
+    padding:24px 20px 20px;
+    position:relative;
+    text-align:center;
+    font:500 18px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Arial;
+    animation:fadeIn .25s ease;
+  `;
+
+  // Botón de cerrar
+  const close = document.createElement('button');
+  close.textContent = '✕';
+  close.setAttribute('aria-label','Cerrar anuncio');
+  close.style.cssText = `
+    position:absolute; top:10px; right:12px;
+    border:0; background:transparent;
+    font-size:26px; font-weight:700; cursor:pointer;
+    color:#444;
+  `;
+
+  const textBox = document.createElement('div');
+  textBox.innerHTML = promoText.replace(/\n/g,'<br>');
+  textBox.style.cssText = 'margin-top:10px;color:#111;';
+
+  card.append(close,textBox);
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
+
+  close.addEventListener('click',()=>{
+    overlay.style.opacity='0';
+    overlay.style.transition='opacity .25s ease';
+    setTimeout(()=>overlay.remove(),250);
+  });
+})();
