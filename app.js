@@ -1304,13 +1304,13 @@ function stepsFor(platform){
   })(window.renderNotifView);
 })(); // ← importante punto y coma 
 
-/* ───────── Banner flotante de anuncio (versión directa y estable) ───────── */
+/* ───────── Banner flotante de anuncio (versión directa y estable, X centrada) ───────── */
 (function(){
   if(!window.__CFG_ALLOWED) return;
 
   // 💬 Aquí escribes tu texto — usa \n para saltos de línea
   const promoText = `
-    📣 ¡Ayuno de Caballeros y Jovenes! diciembre 5 al 7 del 2025, separa la fecha🙌🏽
+    📣 ¡Ayuno de Caballeros y Jóvenes! Diciembre 5 al 7 del 2025 — ¡Separa la fecha! 🙌🏽
   `.trim();
 
   // 🖼️ Imagen opcional (déjalo vacío si no quieres fondo)
@@ -1325,12 +1325,13 @@ function stepsFor(platform){
   overlay.style.cssText = `
     position:fixed; inset:0; z-index:100000;
     background:rgba(0,0,0,.75);
-    display:flex; align-items:center; justify-content:center;
+    display:flex; flex-direction:column;
+    align-items:center; justify-content:center;
     padding:20px;
     animation:fadeIn .3s ease;
   `;
 
-  // Crear tarjeta
+  // Crear tarjeta principal
   const card = document.createElement('div');
   card.style.cssText = `
     position:relative;
@@ -1360,38 +1361,44 @@ function stepsFor(platform){
     card.appendChild(bg);
   }
 
-  // Contenido de texto
+  // Contenido del texto
   const textBox = document.createElement('div');
   textBox.innerHTML = promoText.replace(/\n/g,'<br>');
   textBox.style.cssText = `
     position:relative; z-index:1;
-    padding:24px 16px 30px;
+    padding:28px 16px 34px;
     color:#fff;
     font-weight:600;
     text-shadow:0 2px 4px rgba(0,0,0,.4);
   `;
+  card.appendChild(textBox);
 
-  // Botón cerrar
+  // Botón de cerrar (centrado debajo)
   const close = document.createElement('button');
   close.textContent = '✕';
   close.setAttribute('aria-label','Cerrar anuncio');
   close.style.cssText = `
-    position:absolute; top:10px; right:12px;
-    border:0; background:rgba(0,0,0,.45);
-    font-size:24px; font-weight:700;
-    color:#fff; border-radius:50%;
-    width:36px; height:36px;
-    cursor:pointer; z-index:2;
-    backdrop-filter:blur(4px);
+    margin-top:18px;
+    border:0;
+    background:#e11d48;
+    color:#fff;
+    font-size:20px;
+    font-weight:700;
+    border-radius:50%;
+    width:50px; height:50px;
+    cursor:pointer;
+    box-shadow:0 4px 12px rgba(0,0,0,.4);
   `;
 
+  // Al hacer clic, cierra suavemente
   close.addEventListener('click',()=>{
     overlay.style.opacity='0';
     overlay.style.transition='opacity .3s ease';
     setTimeout(()=>overlay.remove(),300);
   });
 
-  card.append(close, textBox);
+  // Montar estructura
   overlay.appendChild(card);
+  overlay.appendChild(close);
   document.body.appendChild(overlay);
 })();
