@@ -1310,7 +1310,6 @@ function stepsFor(platform){
 
   // 💬 Aquí escribes tu texto — usa \n para saltos de línea
   const promoText = `
-    📣 ¡Ayuno de Caballeros y Jóvenes! Diciembre 5 al 7 del 2025 — ¡Separa la fecha! 🙌🏽
   `.trim();
 
   // 🖼️ Imagen opcional (déjalo vacío si no quieres fondo)
