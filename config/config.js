@@ -44,14 +44,33 @@ window.APP_CONFIG = {
     logoRotating: "https://raw.githubusercontent.com/dla-tech/Media-privada/refs/heads/main/Logo%20de%20la%20iglesia%20PIPJM-2.png"
   },
 
-  /* ───────── Loader / Pantalla de carga ───────── */
+  /* ───────── Loader / Pantalla de carga (Editable) ─────────
+     - Para activar “tipo Walmart”: usa video (mp4 h264) de 3–5s
+     - Para activar con imagen: usa image
+     - Para apagar: enabled:false  (o deja video/image vacío)
+  */
   loader: {
+    enabled: true,
+
+    // ✅ Usa UNO:
+    // video: "https://raw.githubusercontent.com/dla-tech/Media-privada/main/Loader/navidad.mp4",
+    // image: "https://raw.githubusercontent.com/dla-tech/Media-privada/refs/heads/main/IMG_8023.jpeg",
+
+    // Por ahora lo dejo con tu imagen actual (hasta que subas el mp4):
+    video: "",
     image: "https://raw.githubusercontent.com/dla-tech/Media-privada/refs/heads/main/IMG_8023.jpeg",
+
+    // Opcional (recomendado si usas video, por si tarda en cargar)
+    poster: "",
+
     objectFit: "cover",
     objectPosition: "50% 45%",
-    minVisibleMs: 7500,
-    fadeMs: 8000,
-    hardFallbackMs: 7500 + 8000 + 7500,
+
+    // ⏱️ “Intro” corta (ponlo a menos de 5000 si quieres <5s)
+    minVisibleMs: 4500,
+    fadeMs: 600,
+    hardFallbackMs: 4500 + 600 + 2000,
+
     text: { enabled: false }
   },
 
@@ -109,7 +128,7 @@ window.APP_CONFIG = {
       "webcal://p158-caldav.icloud.com/published/2/MTYyMzg4NDUwMjAxNjIzOFc_RCw-iCOSeM_LMqkWZcQMuX9sTzZF-PyrU9d06Oy4V0VhxUSZVqCmqzUsygyCHgAllfl2DFW34WcFi8EvPD8"
   },
 
-    /* ───────── ICS (martes/miércoles) ───────── */
+  /* ───────── ICS (martes/miércoles) ───────── */
   ics: {
     // ⚠️ Usa siempre el enlace RAW de GitHub para que cargue bien
     url: "https://raw.githubusercontent.com/dla-tech/Media-privada/main/calendarios/calendario.ics",
@@ -127,6 +146,7 @@ window.APP_CONFIG = {
     cacheBuster: true,   // si es true, añade un timestamp al URL para evitar caché
     fallbackTown: "Maunabo, Puerto Rico" // localidad que se usará si no detecta ninguna
   },
+
   /* ───────── Promos (JSON externo) ───────── */
   promos: {
     manifestUrl: "https://raw.githubusercontent.com/dla-tech/Media-privada/refs/heads/main/Promo/Promos.json",
