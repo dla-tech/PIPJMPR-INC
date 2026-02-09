@@ -25,6 +25,16 @@ const messaging = firebase.messaging();
 const DEFAULT_ICON  = "icons/icon-192.png";
 const DEFAULT_BADGE = "icons/icon-72.png";
 
+// ✅ Enviar mensajes a todas las ventanas abiertas de la app (para la bandeja/campanita)
+async function broadcastToClients(msg){
+  try{
+    const allClients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const c of allClients){
+      try { c.postMessage(msg); } catch(_) {}
+    }
+  }catch(_){}
+}
+
 // --- Helpers: parse patterns from body and build overlay URL ---
 function extractPatterns(text){
   const t = String(text || '');
@@ -32,16 +42,16 @@ function extractPatterns(text){
   const mImg  = t.match(/#img\(([^)]+)\)/i);           // #img(URL)
   const mLink = t.match(/#link\(([^)]+)\)/i);          // #link(URL)
   return {
-    date: mDate ? mDate[1] : '',
-    image: mImg ? mImg[1] : '',
-    link: mLink ? mLink[1] : ''
+    date:  mDate ? mDate[1] : '',
+    image: mImg  ? mImg[1]  : '',
+    link:  mLink ? mLink[1] : ''
   };
 }
 
 function buildNotifUrl(title, body, extra){
   const q = new URLSearchParams({
     title: String(title || 'Notificación'),
-    body:  String(body || ''),
+    body:  String(body  || ''),
     date:  extra?.date  || '',
     image: extra?.image || '',
     link:  extra?.link  || ''
@@ -51,11 +61,11 @@ function buildNotifUrl(title, body, extra){
 
 // Mensajes en background
 messaging.onBackgroundMessage((payload) => {
-  // Si viene "notification", deja que el navegador la maneje (evita duplicados).
-  // En ese caso, resolveremos la URL en el click (ver handler de 'notificationclick').
+  // Si viene "notification", evita duplicados (el navegador la maneja).
+  // Aun así, el click lo manejamos abajo en notificationclick.
   if (payload?.notification) return;
 
-  // Si viene como data message (p. ej. desde Atajos), construiremos nosotros la notificación
+  // Data message
   const d = payload?.data || {};
   const title = d.title || 'Notificación';
   const body  = d.body  || '';
@@ -85,7 +95,20 @@ messaging.onBackgroundMessage((payload) => {
     }
   };
 
+  // Mostrar notificación
   self.registration.showNotification(title, options);
+
+  // ✅ Avisar a la app (si está abierta) para que la campanita la guarde
+  broadcastToClients({
+    type: 'notif:new',
+    payload: {
+      title,
+      body,
+      date:  meta.date,
+      image: meta.image,
+      link:  meta.link
+    }
+  });
 });
 
 // Click en la notificación
@@ -103,16 +126,29 @@ self.addEventListener('notificationclick', (event) => {
 
   event.waitUntil((async () => {
     const allClients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+
     if (allClients.length > 0) {
       const client = allClients[0];
+
+      // Navegar si hace falta
       const needNav = !client.url.includes(targetUrl);
       if (needNav && 'navigate' in client) {
         try { await client.navigate(targetUrl); } catch(e) {}
       }
+
+      // Enfocar
       try { await client.focus(); } catch(e) {}
+
+      // ✅ Marcar/avisar: se abrió desde push (para bandeja/badge)
+      try { client.postMessage({ type: 'notif:open', url: targetUrl }); } catch(e) {}
+
+      // Mantener tu señal actual por si tu app usa "go"
       try { client.postMessage({ type: 'go', url: targetUrl }); } catch(e) {}
+
       return;
     }
+
+    // Si no hay ventanas, abrir una nueva
     if (self.clients.openWindow) {
       return self.clients.openWindow(targetUrl);
     }
