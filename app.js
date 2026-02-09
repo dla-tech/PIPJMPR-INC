@@ -952,90 +952,112 @@ function stepsFor(platform){
 /* ───────── Firebase + notifs (permiso/token UI) ───────── */
 (function(){
   if(!window.__CFG_ALLOWED) return;
-  const cfg=window.APP_CONFIG; if(!cfg.firebase?.app) return;
+  const cfg = window.APP_CONFIG; 
+  if(!cfg?.firebase?.app) return;
 
+  // Init Firebase (compat)
   if(!window.firebase?.apps?.length) firebase.initializeApp(cfg.firebase.app);
-  if(!window.db && firebase.firestore) window.db=firebase.firestore();
+  if(!window.db && firebase.firestore) window.db = firebase.firestore();
   const messaging = firebase.messaging ? firebase.messaging() : null;
 
-  if('serviceWorker' in navigator){
-    window.addEventListener('load', ()=>{
-      navigator.serviceWorker.register(cfg.firebase.serviceWorkers?.app||'./service-worker.js',{scope:'./'})
-        .then(reg=>{ window.appSW=reg })
-        .catch(()=>{});
+  // ==== Service Worker: SOLO FCM SW (un solo SW por scope) ====
+  let __fcmRegPromise = null;
 
-      navigator.serviceWorker.register(cfg.firebase.serviceWorkers?.fcm||'./firebase-messaging-sw.js',{scope:'./'})
-        .then(reg=>{
-          window.fcmSW=reg;
-          // Asegura referencia al SW activo (muy importante para getToken y mensajes)
-          navigator.serviceWorker.ready.then(r => { window.fcmSW = r; });
-        })
-        .catch(()=>{});
-    },{once:true});
-  }
-
-  let __fcmRegPromise=null;
-  function waitForFcmSW(){
+  function ensureFcmSW(){
     if(__fcmRegPromise) return __fcmRegPromise;
-    __fcmRegPromise = new Promise(async (resolve,reject)=>{
-      try{
-        if(window.fcmSW) return resolve(window.fcmSW);
-        if('serviceWorker' in navigator){
-          try{
-            const reg = await navigator.serviceWorker.register((cfg.firebase.serviceWorkers?.fcm || './firebase-messaging-sw.js'),{scope:'./'});
-            window.fcmSW=reg; return resolve(reg);
-          }catch(e){}
-        }
-        const start=Date.now();
-        (function poll(){
-          if(window.fcmSW) return resolve(window.fcmSW);
-          if(Date.now()-start>1500) return reject(new Error('FCM SW no disponible'));
-          setTimeout(poll,100);
-        })();
-      }catch(err){ reject(err); }
+
+    __fcmRegPromise = (async ()=>{
+      if(!('serviceWorker' in navigator)) throw new Error('Service Worker no soportado');
+
+      const swUrl = (cfg.firebase.serviceWorkers?.fcm || './firebase-messaging-sw.js');
+
+      // 1) intenta usar el registro existente del scope actual (./)
+      let reg = await navigator.serviceWorker.getRegistration('./');
+
+      // 2) si no existe, registra (una sola vez)
+      if(!reg){
+        reg = await navigator.serviceWorker.register(swUrl, { scope: './' });
+      }
+
+      // 3) espera a que esté listo/controlando
+      try { await navigator.serviceWorker.ready; } catch(_){}
+
+      window.fcmSW = reg;
+      return reg;
+    })().finally(()=>{
+      // deja el promise guardado; si quieres “reintentar” en futuro, quita esta línea.
+      // (lo dejamos para estabilidad)
     });
+
     return __fcmRegPromise;
   }
 
-  let __fcmTokenPromise=null;
+  // ==== Guardar token en Firestore ====
   async function guardarTokenFCM(token){
     try{
       if(!window.db) return;
-      const ua=navigator.userAgent||''; const ts=new Date().toISOString();
-      await window.db.collection(cfg.firebase.firestore?.tokensCollection||'fcmTokens').doc(token).set({token,ua,ts},{merge:true});
-    }catch(e){ console.error('Error guardando token FCM:',e); }
+      const ua = navigator.userAgent || '';
+      const ts = new Date().toISOString();
+      await window.db
+        .collection(cfg.firebase.firestore?.tokensCollection || 'fcmTokens')
+        .doc(token)
+        .set({ token, ua, ts }, { merge:true });
+    }catch(e){
+      console.error('Error guardando token FCM:', e);
+    }
   }
+
+  // ==== Obtener token (sin duplicar registros) ====
+  let __fcmTokenPromise = null;
+
   async function obtenerToken(){
     if(!messaging) return null;
     if(!('Notification' in window)) return null;
-    if(Notification.permission!=='granted') return null;
+    if(Notification.permission !== 'granted') return null;
+
     if(__fcmTokenPromise) return __fcmTokenPromise;
 
-    __fcmTokenPromise=(async()=>{
+    __fcmTokenPromise = (async ()=>{
       try{
-        const fcmReg=await waitForFcmSW();
-        const opts={ vapidKey: cfg.firebase.vapidPublicKey, serviceWorkerRegistration: fcmReg };
+        const reg = await ensureFcmSW();
+        const opts = {
+          vapidKey: cfg.firebase.vapidPublicKey,
+          serviceWorkerRegistration: reg
+        };
         const token = await messaging.getToken(opts);
+
         if(token && cfg.firebase.firestore?.enabled !== false){
           const prev = localStorage.getItem('fcm_token');
-          if(token!==prev){ await guardarTokenFCM(token); localStorage.setItem('fcm_token', token); }
+          if(token !== prev){
+            await guardarTokenFCM(token);
+            localStorage.setItem('fcm_token', token);
+          }
         }
+
         return token || null;
-      }catch(e){ console.error('getToken FCM:',e); return null; }
-      finally{ __fcmTokenPromise=null; }
+      }catch(e){
+        console.error('getToken FCM:', e);
+        return null;
+      }finally{
+        __fcmTokenPromise = null;
+      }
     })();
+
     return __fcmTokenPromise;
   }
+
   async function hasValidToken(){
     try{
-      const prev=localStorage.getItem('fcm_token');
-      if(prev && prev.length>10) return prev;
-      const t=await obtenerToken();
-      return t||null;
-    }catch{ return null; }
+      const prev = localStorage.getItem('fcm_token');
+      if(prev && prev.length > 10) return prev;
+      return await obtenerToken();
+    }catch{
+      return null;
+    }
   }
 
-  const nb = $('#'+(cfg.nav?.notifButton?.id||'btn-notifs'));
+  // ==== Botón UI ====
+  const nb = document.getElementById(cfg.nav?.notifButton?.id || 'btn-notifs');
   if(!nb) return;
 
   const isStandalone =
@@ -1043,60 +1065,90 @@ function stepsFor(platform){
     (window.navigator.standalone === true);
 
   nb.style.display = isStandalone ? '' : 'none';
-  nb.style.pointerEvents='auto';
+  nb.style.pointerEvents = 'auto';
 
   async function setState(){
     const labels = cfg.nav?.notifButton?.labels || {};
-    const p = (typeof Notification!=='undefined') ? Notification.permission : 'default';
-    if (p==='granted'){
+    const p = (typeof Notification !== 'undefined') ? Notification.permission : 'default';
+
+    if(p === 'granted'){
       const tok = await hasValidToken();
-      if (tok){ nb.classList.add('ok'); nb.textContent = labels.ok || '✅ NOTIFICACIONES'; }
-      else { nb.classList.remove('ok'); nb.textContent = labels.noToken || '⚠️ ACTIVAR NOTIFICACIONES'; }
-    } else if (p==='denied'){
-      nb.classList.remove('ok'); nb.textContent = labels.denied || '🚫 NOTIFICACIONES';
-    } else {
-      nb.classList.remove('ok'); nb.textContent = labels.default || 'NOTIFICACIONES';
+      if(tok){
+        nb.classList.add('ok');
+        nb.textContent = labels.ok || '✅ NOTIFICACIONES';
+      }else{
+        nb.classList.remove('ok');
+        nb.textContent = labels.noToken || '⚠️ ACTIVAR NOTIFICACIONES';
+      }
+    }else if(p === 'denied'){
+      nb.classList.remove('ok');
+      nb.textContent = labels.denied || '🚫 NOTIFICACIONES';
+    }else{
+      nb.classList.remove('ok');
+      nb.textContent = labels.default || 'NOTIFICACIONES';
     }
   }
+
+  // Estado inicial
   setState();
 
+  // Click: pedir permiso + token
   nb.addEventListener('click', async (e)=>{
     e.preventDefault();
-    if (typeof Notification==='undefined'){ alert('Este dispositivo no soporta notificaciones.'); return; }
-    nb.classList.add('loading'); nb.textContent='⏳ NOTIFICACIONES';
+
+    if(typeof Notification === 'undefined'){
+      alert('Este dispositivo no soporta notificaciones.');
+      return;
+    }
+
+    nb.classList.add('loading');
+    nb.textContent = '⏳ NOTIFICACIONES';
+
     try{
-      const perm = (Notification.permission==='granted')?'granted':await Notification.requestPermission();
-      if(perm==='granted') await obtenerToken();
+      // Asegura que el SW FCM exista antes de pedir token
+      await ensureFcmSW();
+
+      const perm = (Notification.permission === 'granted')
+        ? 'granted'
+        : await Notification.requestPermission();
+
+      if(perm === 'granted'){
+        await obtenerToken();
+      }
+
       await setState();
-    } finally { nb.classList.remove('loading'); }
+    }finally{
+      nb.classList.remove('loading');
+    }
   });
 
+  // Mensajes en primer plano → manda a bandeja
   if(messaging){
-    // 📥 Primer plano: guarda TODAS las notificaciones en la bandeja
     messaging.onMessage((payload)=>{
       try{
         const d = payload?.data || {};
-        // comunicamos al módulo de bandeja mediante evento global
-        window.dispatchEvent(new CustomEvent('app:notifIncoming',{ detail:{
+        window.dispatchEvent(new CustomEvent('app:notifIncoming', { detail:{
           title: d.title || payload?.notification?.title || 'Notificación',
           body:  d.body  || payload?.notification?.body  || '',
           date:  d.date  || '',
           image: d.image || '',
           link:  d.link  || ''
         }}));
-      }catch(e){ console.error('onMessage error',e); }
+      }catch(e){
+        console.error('onMessage error', e);
+      }
     });
   }
 
-  if (window.matchMedia) {
+  // Si cambia el display-mode, muestra/oculta botón
+  if(window.matchMedia){
     const mq = window.matchMedia('(display-mode: standalone)');
-    mq.addEventListener?.('change', () => {
+    mq.addEventListener?.('change', ()=>{
       const st = mq.matches || (window.navigator.standalone === true);
       nb.style.display = st ? '' : 'none';
     });
   }
 })();
-
 /* ───────── Logo giratorio ───────── */
 (function(){
   if(!window.__CFG_ALLOWED) return;
