@@ -11,7 +11,8 @@ window.APP_CONFIG = {
     allowedHosts: [
       "localhost",
       "127.0.0.1",
-      "dla-tech.github.io"   // tu GitHub Pages
+      "dla-tech.github.io",  // tu GitHub Pages principal
+      "github.io"            // ✅ permite cualquier repo *.github.io (para pruebas / clones)
     ],
     enforceHostCheck: true,
     useBackendForSensitiveWrites: false,
@@ -44,44 +45,28 @@ window.APP_CONFIG = {
     logoRotating: "https://raw.githubusercontent.com/dla-tech/Media-privada/refs/heads/main/Logo%20de%20la%20iglesia%20PIPJM-2.png"
   },
 
-  /* ───────── Loader / Pantalla de carga (Editable) ─────────
-     - Para activar “tipo Walmart”: usa video (mp4 h264) de 3–5s
-     - Para activar con imagen: usa image
-     - Para apagar: enabled:false  (o deja video/image vacío)
-  */
+  /* ───────── Loader / Pantalla de carga ───────── */
   loader: {
     enabled: true,
-
-    // ✅ Usa UNO:
-    // video: "https://raw.githubusercontent.com/dla-tech/Media-privada/main/Loader/navidad.mp4",
-    // image: "https://raw.githubusercontent.com/dla-tech/Media-privada/refs/heads/main/IMG_8023.jpeg",
-
-    // Por ahora lo dejo con tu imagen actual (hasta que subas el mp4):
     video: "",
     image: "https://raw.githubusercontent.com/dla-tech/Media-privada/refs/heads/main/IMG_8023.jpeg",
-
-    // Opcional (recomendado si usas video, por si tarda en cargar)
     poster: "",
-
     objectFit: "cover",
     objectPosition: "50% 45%",
-
-    // ⏱️ “Intro” corta (ponlo a menos de 5000 si quieres <5s)
     minVisibleMs: 4500,
     fadeMs: 600,
     hardFallbackMs: 4500 + 600 + 2000,
-
     text: { enabled: false }
   },
 
   /* ───────── Nav / botones de arriba ───────── */
   nav: {
     links: [
-      { id: "cal",  label: "Calendarios",           href: "#calendarios" },
-      { id: "red",  label: "Redes sociales",        href: "#redes" },
-      { id: "tpl",  label: "Ubicación del templo",  href: "#ubicacion-templo" },
+      { id: "cal",  label: "Calendarios",             href: "#calendarios" },
+      { id: "red",  label: "Redes sociales",          href: "#redes" },
+      { id: "tpl",  label: "Ubicación del templo",    href: "#ubicacion-templo" },
       { id: "ctos", label: "Ubicación de los cultos", href: "#ubicacion-cultos" },
-      { id: "prop", label: "Propósito",             href: "#proposito" }
+      { id: "prop", label: "Propósito",               href: "#proposito" }
     ],
     notifButton: {
       id: "btn-notifs",
@@ -100,12 +85,12 @@ window.APP_CONFIG = {
     }
   },
 
-  /* ───────── Bandeja interna de notificaciones (campanita) ───────── */
+  /* ───────── Bandeja interna de notificaciones ───────── */
   inbox: {
     enabled: true,
-    storageKey: "notifs",   // donde se guardan en localStorage
-    maxItems: 200,          // máximo guardadas
-    badgeMax: 9,            // muestra "9+" cuando excede
+    storageKey: "notifs",
+    maxItems: 200,
+    badgeMax: 9,
     ui: {
       title: "Notificaciones",
       markAllLabel: "Marcar leídas",
@@ -130,21 +115,14 @@ window.APP_CONFIG = {
 
   /* ───────── ICS (martes/miércoles) ───────── */
   ics: {
-    // ⚠️ Usa siempre el enlace RAW de GitHub para que cargue bien
     url: "https://raw.githubusercontent.com/dla-tech/Media-privada/main/calendarios/calendario.ics",
-
-    // Zona horaria en la que se interpretarán los eventos
     timeZone: "America/Puerto_Rico",
-
-    // Etiquetas que se muestran en la web
     labels: {
       martesPrefix: "Martes",
       miercolesPrefix: "Miércoles"
     },
-
-    // Opciones extra para robustez
-    cacheBuster: true,   // si es true, añade un timestamp al URL para evitar caché
-    fallbackTown: "Maunabo, Puerto Rico" // localidad que se usará si no detecta ninguna
+    cacheBuster: true,
+    fallbackTown: "Maunabo, Puerto Rico"
   },
 
   /* ───────── Promos (JSON externo) ───────── */
@@ -156,7 +134,7 @@ window.APP_CONFIG = {
   /* ───────── YouTube Live ───────── */
   youtube: {
     handle: "@pipjm9752",
-    channelId: "UCIecC8LfuWsK82SnPIjbqGQ" // opcional
+    channelId: "UCIecC8LfuWsK82SnPIjbqGQ"
   },
 
   /* ───────── PWA / install copy ───────── */
