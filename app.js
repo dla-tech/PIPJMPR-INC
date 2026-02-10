@@ -1308,36 +1308,27 @@ function stepsFor(platform){
 
   const load = () => { try { return JSON.parse(localStorage.getItem(KEY)||'[]'); } catch { return []; } };
   const save = (list) => { try { localStorage.setItem(KEY, JSON.stringify(list.slice(0, MAX))); } catch {} };
-
-  function add(n){
+  const add  = (n) => {
     const list = load();
     const item = {
-      id:   n?.id   || (Date.now()+'-'+Math.random().toString(36).slice(2,8)),
-      ts:   +n?.ts  || Date.now(),
-      title: String(n?.title||'Notificación').slice(0,140),
-      body:  String(n?.body||''),
-      date:  String(n?.date||''),
-      image: n?.image||'',
-      link:  n?.link ||'',
-      read:  !!n?.read
+      id:   n.id   || (Date.now()+'-'+Math.random().toString(36).slice(2,8)),
+      ts:   +n.ts  || Date.now(),
+      title: String(n.title||'Notificación').slice(0,140),
+      body:  String(n.body||''),
+      date:  String(n.date||''),
+      image: n.image||'',
+      link:  n.link ||'',
+      read:  !!n.read
     };
-
     // evita duplicados exactos recientes (5 min)
     const five = Date.now()-5*60*1000;
     const dup = list.find(x => x.ts>five && x.title===item.title && x.body===item.body);
     if (!dup) list.unshift(item);
-
     save(list);
     return item;
-  }
-
-  function markAllRead(){
-    const a=load(); a.forEach(x=>x.read=true); save(a); return a;
-  }
-
-  function delById(id){
-    const a=load().filter(x=>x.id!==id); save(a); return a;
-  }
+  };
+  const markAllRead = ()=>{ const a=load(); a.forEach(x=>x.read=true); save(a); return a; };
+  const delById     = (id)=>{ const a=load().filter(x=>x.id!==id); save(a); return a; };
 
   // === UI: campana flotante + badge (SOLO si es standalone)
   let bell=null, badge=null, panel=null;
@@ -1384,12 +1375,10 @@ function stepsFor(platform){
     const box  = document.getElementById('notif-list');
     if (!box){ return; } // si no hay UI (no standalone), no renderizamos
     box.innerHTML = '';
-
     if (!list.length) {
       box.innerHTML = `<div style="padding:14px;color:#6b7280">${inboxCfg.ui?.emptyText||'Sin notificaciones'}</div>`;
       return;
     }
-
     for (const n of list) {
       const row = document.createElement('div');
       row.style.cssText = `padding:10px 12px;border-bottom:1px solid #eee;${n.read?'opacity:.65':''}`;
@@ -1406,122 +1395,6 @@ function stepsFor(platform){
       box.appendChild(row);
     }
   }
-
-  // Badge (funciona aun sin UI; solo actualiza si existe)
-  const BADGE_MAX = +inboxCfg.badgeMax > 0 ? +inboxCfg.badgeMax : 9;
-  function updateBadge(){
-    if (!badge) return;
-    const c = load().filter(x=>!x.read).length;
-    if (c>0){
-      badge.textContent = c > BADGE_MAX ? (BADGE_MAX + '+') : String(c);
-      badge.style.display='';
-    } else {
-      badge.style.display='none';
-    }
-  }
-
-  /* ✅ NUEVO: si la app se abre en #/notif?... (click de push), guardar en bandeja */
-  function parseNotifFromHash(){
-    if(!location.hash.startsWith('#/notif')) return null;
-    const idx = location.hash.indexOf('?');
-    const qs = new URLSearchParams(idx >= 0 ? location.hash.slice(idx+1) : '');
-    return {
-      title: qs.get('title') || 'Notificación',
-      body:  qs.get('body')  || '',
-      date:  qs.get('date')  || '',
-      image: qs.get('image') || '',
-      link:  qs.get('link')  || '',
-      // Entró por click => ya “abierta” (no debe sumar badge)
-      read:  true
-    };
-  }
-  function saveFromHashIfNeeded(){
-    const p = parseNotifFromHash();
-    if(!p) return;
-    add(p);
-    updateBadge();
-    if (panel && panel.style.display === 'block') render();
-  }
-  window.addEventListener('load', saveFromHashIfNeeded, { once:true });
-  window.addEventListener('hashchange', saveFromHashIfNeeded);
-
-  // Mensajes del SW → guarda nuevas (SIEMPRE activos)
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.addEventListener('message', (ev)=>{
-      const d = ev.data || {};
-
-      if (d.type === 'notif:new' && d.payload) {
-        add(d.payload);
-        updateBadge();
-        if (panel && panel.style.display === 'block') render();
-      }
-
-      if (d.type === 'notif:open' && typeof d.url === 'string') {
-        // Intentar marcar como leída la notificación que coincide con title/body dentro del hash
-        try{
-          const u = new URL(d.url, location.origin);
-          const q = new URLSearchParams(u.hash.split('?')[1]||'');
-          const t = decodeURIComponent(q.get('title') || '');
-          const b = decodeURIComponent(q.get('body')  || '');
-
-          const list = load(); let changed = false;
-          for (const x of list) {
-            if (!x.read && x.title===t && x.body===b) { x.read = true; changed = true; }
-          }
-          if (changed) save(list);
-
-          updateBadge();
-          if (panel && panel.style.display === 'block') render();
-        }catch(_){}
-      }
-    });
-  }
-
-  // Primer plano (evento que manda el módulo FCM UI) — SIEMPRE activo
-  window.addEventListener('app:notifIncoming',(e)=>{
-    add(e.detail||{});
-    updateBadge();
-    if (panel && panel.style.display === 'block') render();
-  });
-
-  // Abrir item → hoja (solo si existe UI)
-  if (isStandalone && panel) {
-    panel.addEventListener('click', (e)=>{
-      const b = e.target.closest('button'); if(!b) return;
-      const id = b.getAttribute('data-id');
-      const act = b.getAttribute('data-act');
-
-      if (act === 'open') {
-        const it = load().find(x=>x.id===id);
-        if (it) {
-          const qs = new URLSearchParams();
-          qs.set('title', it.title);
-          qs.set('body',  it.body);
-          if (it.date)  qs.set('date',  it.date);
-          if (it.image) qs.set('image', it.image);
-          if (it.link)  qs.set('link',  it.link);
-          location.hash = '/notif?' + qs.toString();
-
-          // marcar leída
-          const list = load();
-          const i = list.findIndex(x=>x.id===id);
-          if (i>=0) { list[i].read = true; save(list); }
-          updateBadge();
-        }
-        panel.style.display='none';
-      }
-
-      if (act === 'del') {
-        save(delById(id));
-        render();
-        updateBadge();
-      }
-    });
-  }
-
-  // Arranque
-  updateBadge();
-})();
 
   // Badge (funciona aun sin UI; solo actualiza si existe)
   const BADGE_MAX = +inboxCfg.badgeMax > 0 ? +inboxCfg.badgeMax : 9;
