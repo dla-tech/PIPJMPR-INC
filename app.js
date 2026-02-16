@@ -1218,6 +1218,29 @@ function stepsFor(platform){
       nb.classList.remove('loading');
     }
   });
+  // ✅ Auto-reenganche seguro (NO refresca tokens; solo recupera si falta)
+window.addEventListener('load', async () => {
+  try {
+    if (typeof Notification === 'undefined') return;
+    if (Notification.permission !== 'granted') return;
+
+    // Si ya hay token guardado, solo actualiza estado (NO crea token nuevo)
+    const cached = (localStorage.getItem('fcm_token') || '').trim();
+    if (cached && cached.length > 10) {
+      await setState();
+      return;
+    }
+
+    // Si NO hay token, intentamos obtener UNO (una sola vez al abrir)
+    const t = await obtenerToken();
+    if (t) {
+      try { localStorage.setItem('fcm_token', t); } catch(_) {}
+    }
+    await setState();
+  } catch (e) {
+    console.error('Auto-init FCM falló:', e);
+  }
+}, { once: true });
 
   // Primer plano: manda a bandeja interna
   if(messaging){
