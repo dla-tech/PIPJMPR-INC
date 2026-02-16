@@ -186,20 +186,20 @@ window.APP_CONFIG = {
   },
 
   /* ───────── Bandeja interna de notificaciones (campanita) ───────── */
-  inbox: {
-    enabled: true,
-    storageKey: "notifs",   // donde se guardan en localStorage
-    maxItems: 200,          // máximo guardadas
-    badgeMax: 9,            // muestra "9+" cuando excede
-    ui: {
-      title: "Notificaciones",
-      markAllLabel: "Marcar leídas",
-      closeLabel: "Cerrar",
-      openLabel: "Abrir",
-      deleteLabel: "Borrar",
-      emptyText: "Sin notificaciones"
-    }
-  },
+inbox: {
+  enabled: true,
+  storageKey: "notifs",   // donde se guardan en localStorage
+  maxItems: 200,          // máximo de notificaciones guardadas
+  badgeMax: 9,            // muestra "9+" cuando se excede el límite
+  ui: {
+    title: "Notificaciones",
+    markAllLabel: "Marcar como leídas",
+    closeLabel: "Cerrar",
+    openLabel: "Abrir",
+    deleteLabel: "Eliminar",
+    emptyText: "No hay notificaciones"
+  }
+},
 
   /* ───────── Calendarios ───────── */
   calendars: {
