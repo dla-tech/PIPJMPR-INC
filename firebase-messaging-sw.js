@@ -1,80 +1,156 @@
-/* firebase-messaging-sw.js */
-'use strict';
+/* eslint-disable no-undef */
+// === Service Worker para Firebase Cloud Messaging (FCM) ===
+importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js');
 
-importScripts('https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js');
-importScripts('https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js');
+// Forzar que el SW nuevo tome control rápido
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', (event) => {
+  event.waitUntil(self.clients.claim());
+});
 
-const cfg = (self.APP_CONFIG && self.APP_CONFIG.firebase && self.APP_CONFIG.firebase.app)
-  ? self.APP_CONFIG
-  : null;
-
-// 🔹 Si no puedes leer APP_CONFIG dentro del SW, pega aquí tu firebaseConfig manual:
-const firebaseConfig = cfg?.firebase?.app || {
+// Config de tu proyecto
+firebase.initializeApp({
   apiKey: "AIzaSyAHQjMp8y9uaxAd0nnmCcVaXWSbij3cvEo",
   authDomain: "miappiglesia-c703a.firebaseapp.com",
   projectId: "miappiglesia-c703a",
   storageBucket: "miappiglesia-c703a.appspot.com",
   messagingSenderId: "501538616252",
   appId: "1:501538616252:web:d6ead88050c4dd7b09b1b9"
-};
+});
 
-if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 const messaging = firebase.messaging();
 
-// Helper: arma el hash que tu app entiende
-function buildNotifHash(data){
-  const qs = new URLSearchParams();
-  qs.set('title', data?.title || 'Notificación');
-  qs.set('body',  data?.body  || '');
-  if (data?.date)  qs.set('date',  data.date);
-  if (data?.image) qs.set('image', data.image);
-  if (data?.link)  qs.set('link',  data.link);
-  return '#/notif?' + qs.toString();
+// Iconos por defecto Android
+const DEFAULT_ICON  = "icons/icon-192.png";
+const DEFAULT_BADGE = "icons/icon-72.png";
+
+// ✅ Enviar mensajes a todas las ventanas abiertas de la app (para la bandeja/campanita)
+async function broadcastToClients(msg){
+  try{
+    const allClients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const c of allClients){
+      try { c.postMessage(msg); } catch(_) {}
+    }
+  }catch(_){}
 }
 
-// ✅ Background message (llega con app cerrada)
-messaging.onBackgroundMessage((payload) => {
-  const d = payload?.data || {};
-  const title = d.title || payload?.notification?.title || 'Notificación';
-  const body  = d.body  || payload?.notification?.body  || '';
-  const image = d.image || '';
-  const link  = d.link  || '';
-  const date  = d.date  || '';
+// --- Helpers: parse patterns from body and build overlay URL ---
+function extractPatterns(text){
+  const t = String(text || '');
+  const mDate = t.match(/#\((\d{4}-\d{2}-\d{2})\)/);    // #(YYYY-MM-DD)
+  const mImg  = t.match(/#img\(([^)]+)\)/i);           // #img(URL)
+  const mLink = t.match(/#link\(([^)]+)\)/i);          // #link(URL)
+  return {
+    date:  mDate ? mDate[1] : '',
+    image: mImg  ? mImg[1]  : '',
+    link:  mLink ? mLink[1] : ''
+  };
+}
 
-  const hash = buildNotifHash({ title, body, image, link, date });
+function buildNotifUrl(title, body, extra){
+  const q = new URLSearchParams({
+    title: String(title || 'Notificación'),
+    body:  String(body  || ''),
+    date:  extra?.date  || '',
+    image: extra?.image || '',
+    link:  extra?.link  || ''
+  });
+  return '/#/notif?' + q.toString();
+}
+
+// Mensajes en background
+messaging.onBackgroundMessage((payload) => {
+  // Si viene "notification", evita duplicados (el navegador la maneja).
+  // Aun así, el click lo manejamos abajo en notificationclick.
+  if (payload?.notification) return;
+
+  // Data message
+  const d = payload?.data || {};
+  const title = d.title || 'Notificación';
+  const body  = d.body  || '';
+
+  // Extrae patrones del body si no llegan como claves separadas
+  const found = extractPatterns(body);
+  const meta = {
+    date:  d.date  || found.date  || '',
+    image: d.image || found.image || '',
+    link:  d.link  || found.link  || ''
+  };
+
+  const url = d.url || buildNotifUrl(title, body, meta);
 
   const options = {
     body,
+    icon:  d.icon  || DEFAULT_ICON,
+    badge: d.badge || DEFAULT_BADGE,
+    image: meta.image || undefined,
     data: {
-      url: (self.location.origin + '/' + hash),
       title,
-      body
+      body,
+      date:  meta.date,
+      image: meta.image,
+      link:  meta.link,
+      url
     }
   };
 
-  if (image) options.image = image;
-
+  // Mostrar notificación
   self.registration.showNotification(title, options);
+
+  // ✅ Avisar a la app (si está abierta) para que la campanita la guarde
+  broadcastToClients({
+    type: 'notif:new',
+    payload: {
+      title,
+      body,
+      date:  meta.date,
+      image: meta.image,
+      link:  meta.link
+    }
+  });
 });
 
-// ✅ Click: abre la PWA con el hash para que app.js la guarde en la campana
+// Click en la notificación
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const url = event.notification?.data?.url || (self.location.origin + '/');
+
+  // Usa la URL guardada en data o constrúyela desde title/body
+  let targetUrl = event.notification?.data?.url;
+  if (!targetUrl) {
+    const nTitle = event.notification?.title || 'Notificación';
+    const nBody  = event.notification?.body  || '';
+    const found  = extractPatterns(nBody);
+    targetUrl = buildNotifUrl(nTitle, nBody, found) || '/';
+  }
 
   event.waitUntil((async () => {
-    const allClients = await clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const allClients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
 
-    // Si ya hay una ventana abierta, enfócala y navega
-    for (const c of allClients) {
-      try {
-        await c.focus();
-        c.navigate(url);
-        return;
-      } catch (_) {}
+    if (allClients.length > 0) {
+      const client = allClients[0];
+
+      // Navegar si hace falta
+      const needNav = !client.url.includes(targetUrl);
+      if (needNav && 'navigate' in client) {
+        try { await client.navigate(targetUrl); } catch(e) {}
+      }
+
+      // Enfocar
+      try { await client.focus(); } catch(e) {}
+
+      // ✅ Marcar/avisar: se abrió desde push (para bandeja/badge)
+      try { client.postMessage({ type: 'notif:open', url: targetUrl }); } catch(e) {}
+
+      // Mantener tu señal actual por si tu app usa "go"
+      try { client.postMessage({ type: 'go', url: targetUrl }); } catch(e) {}
+
+      return;
     }
 
-    // Si no hay, abre nueva
-    await clients.openWindow(url);
+    // Si no hay ventanas, abrir una nueva
+    if (self.clients.openWindow) {
+      return self.clients.openWindow(targetUrl);
+    }
   })());
 });
