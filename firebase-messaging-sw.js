@@ -21,7 +21,7 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
-// Iconos por defecto Android
+// Iconos por defecto Android/Web
 const DEFAULT_ICON  = "icons/icon-192.png";
 const DEFAULT_BADGE = "icons/icon-72.png";
 
@@ -60,13 +60,14 @@ function buildNotifUrl(title, body, extra){
 }
 
 // Mensajes en background
-messaging.onBackgroundMessage((payload) => {
+messaging.onBackgroundMessage(async (payload) => {
   // Normaliza para soportar payload.notification y payload.data
   const d  = payload?.data || {};
   const pn = payload?.notification || {};
 
-  const title = d.title || pn.title || 'Notificación';
-  const body  = d.body  || pn.body  || '';
+  // Título / body: prioridad a data, luego notification
+  const title = (d.title || pn.title || 'Notificación');
+  const body  = (d.body  || pn.body  || '');
 
   // Extrae patrones del body si no llegan como claves separadas
   const found = extractPatterns(body);
@@ -76,10 +77,11 @@ messaging.onBackgroundMessage((payload) => {
     link:  d.link  || found.link  || ''
   };
 
+  // URL destino
   const url = d.url || buildNotifUrl(title, body, meta);
 
   // ✅ SIEMPRE avisar a la app (si está abierta) para que la campanita la guarde
-  broadcastToClients({
+  await broadcastToClients({
     type: 'notif:new',
     payload: {
       title,
@@ -91,16 +93,33 @@ messaging.onBackgroundMessage((payload) => {
     }
   });
 
-  // ✅ Evitar duplicados: si viene payload.notification, NO mostramos showNotification aquí
-  //    porque el navegador/FCM puede mostrarla automáticamente.
-  if (payload?.notification) return;
+  /**
+   * Mostrar notificación:
+   * - Si viene "notification" a veces el navegador la muestra automáticamente.
+   * - Pero en PWA/web eso no siempre es consistente, así que:
+   *   ✅ Si el servidor manda DATA-only, mostramos nosotros.
+   *   ✅ Si el servidor manda notification+data, intentamos NO duplicar.
+   *
+   * Puedes forzar mostrar siempre pasando d.forceShow="1" (string).
+   */
+  const forceShow = String(d.forceShow || '') === '1';
 
-  // Data message: mostramos la notificación nosotros
+  // Si viene notification y NO es forzado, evitamos duplicado
+  const hasNotification = !!payload?.notification;
+  if (hasNotification && !forceShow) return;
+
+  // Data message (o forzado): mostramos la notificación nosotros
   const options = {
     body,
     icon:  d.icon  || DEFAULT_ICON,
     badge: d.badge || DEFAULT_BADGE,
     image: meta.image || undefined,
+
+    // tag ayuda a agrupar / evitar spam si llega lo mismo repetido
+    // Si tu server manda d.tag úsalo, si no, usa una por defecto.
+    tag: d.tag || 'pipjm-notif',
+    renotify: false,
+
     data: {
       title,
       body,
@@ -111,7 +130,7 @@ messaging.onBackgroundMessage((payload) => {
     }
   };
 
-  self.registration.showNotification(title, options);
+  return self.registration.showNotification(title, options);
 });
 
 // Click en la notificación
