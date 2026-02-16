@@ -1200,96 +1200,46 @@ function stepsFor(platform){
       nb.classList.remove('loading');
     }
   });
-
   // ─────────────────────────────────────────────────────────────
-  // ✅ REFRESCADOR DE TOKENS (SEGURO, SIN ROMPER PWA)
-  // - No borra tokens (no deleteToken)
-  // - Solo intenta re-obtener y re-guardar cuando:
-  //   a) la app se abre
-  //   b) la app vuelve al frente (visibilitychange)
-  //   c) vuelve el internet (online)
-  // - Con "cooldown" para no spammear Firestore
+  // ✅ RESET SEGURO (solo cuando tú tocas el botón)
+  // - Evita tokens "fantasma" creados por refresh automático
+  // - Si algo está raro, hace deleteToken() y vuelve a pedir uno válido
   // ─────────────────────────────────────────────────────────────
-  (function tokenRefresher(){
-    const REFRESH_KEY = 'fcm_last_refresh_ts';
-    const COOLDOWN_MS = 6 * 60 * 60 * 1000; // 6 horas
-    const jitter = (ms)=> ms + Math.floor(Math.random() * 30_000); // +0–30s
+  async function resetTokenIfNeeded(){
+    try{
+      if(!messaging) return null;
+      if(typeof Notification === 'undefined') return null;
+      if(Notification.permission !== 'granted') return null;
 
-    function canRun(){
-      try{
-        if(typeof Notification === 'undefined') return false;
-        if(Notification.permission !== 'granted') return false;
-        return true;
-      }catch(_){ return false; }
-    }
+      const fcmReg = await waitForFcmSW();
+      const opts = {
+        vapidKey: cfg.firebase.vapidPublicKey,
+        serviceWorkerRegistration: fcmReg
+      };
 
-    function due(){
-      try{
-        const last = parseInt(localStorage.getItem(REFRESH_KEY) || '0', 10) || 0;
-        return (Date.now() - last) > COOLDOWN_MS;
-      }catch(_){ return true; }
-    }
-
-    async function run(reason){
-      try{
-        if(!canRun()) return;
-        if(!due()) return;
-
-        // marca intento ANTES
-        try{ localStorage.setItem(REFRESH_KEY, String(Date.now())); }catch(_){}
-
-        const tok = await obtenerToken();
-        if(cfg.security?.verbose) console.log('🔄 Token refresh:', reason, tok ? 'ok' : 'sin token');
-
-        // refresca estado/indicador
-        await setState();
-      }catch(e){
-        console.error('⛔ Token refresh error:', reason, e);
+      // 1) Intenta token normal
+      let token = await messaging.getToken(opts);
+      if(token){
+        if(cfg.firebase.firestore?.enabled !== false){
+          await guardarTokenFCM(token);
+        }
+        return token;
       }
+
+      // 2) Reset real (equivalente a "reinstalar", pero sin reinstalar)
+      try{ await messaging.deleteToken(); }catch(_){}
+
+      token = await messaging.getToken(opts);
+      if(token && cfg.firebase.firestore?.enabled !== false){
+        await guardarTokenFCM(token);
+      }
+      return token || null;
+
+    }catch(e){
+      console.error('⛔ resetTokenIfNeeded error:', e);
+      return null;
     }
-
-    window.addEventListener('load', ()=>{
-      setTimeout(()=>{ run('load'); }, jitter(800));
-    }, { once:true });
-
-    document.addEventListener('visibilitychange', ()=>{
-      if(!document.hidden){
-        setTimeout(()=>{ run('visible'); }, jitter(500));
-      }
-    });
-
-    window.addEventListener('online', ()=>{
-      setTimeout(()=>{ run('online'); }, jitter(900));
-    });
-  })();
-
-  // Primer plano: guarda en bandeja interna
-  if(messaging){
-    messaging.onMessage((payload)=>{
-      try{
-        const d = payload?.data || {};
-        window.dispatchEvent(new CustomEvent('app:notifIncoming',{ detail:{
-          title: d.title || payload?.notification?.title || 'Notificación',
-          body:  d.body  || payload?.notification?.body  || '',
-          date:  d.date  || '',
-          image: d.image || '',
-          link:  d.link  || ''
-        }}));
-      }catch(e){
-        console.error('⛔ onMessage error', e);
-      }
-    });
   }
-
-  // Reaccionar a cambios de modo standalone
-  if(window.matchMedia){
-    const mq = window.matchMedia('(display-mode: standalone)');
-    mq.addEventListener?.('change', ()=>{
-      const st = mq.matches || (window.navigator.standalone === true);
-      nb.style.display = st ? '' : 'none';
-    });
-  }
-})();
 /* ───────── Logo giratorio ───────── */
 (function(){
   if(!window.__CFG_ALLOWED) return;
