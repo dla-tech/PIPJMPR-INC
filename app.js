@@ -949,18 +949,32 @@ function stepsFor(platform){
   window.addEventListener('appinstalled', ()=>{ btn.style.display='none'; });
 })();
 
-/* ───────── Firebase + notifs (permiso/token UI) ───────── */
+/* ───────── firebase-notificacion.js ─────────
+   Firebase + notifs (permiso/token UI) + forward a bandeja interna
+------------------------------------------------ */
 (function(){
   if(!window.__CFG_ALLOWED) return;
+
   const cfg = window.APP_CONFIG;
   if(!cfg?.firebase?.app) return;
 
-  // Init Firebase compat
-  if(!window.firebase?.apps?.length) firebase.initializeApp(cfg.firebase.app);
-  if(!window.db && firebase.firestore) window.db = firebase.firestore();
-  const messaging = firebase.messaging ? firebase.messaging() : null;
+  // Init Firebase (compat)
+  try{
+    if(!window.firebase?.apps?.length) firebase.initializeApp(cfg.firebase.app);
+  }catch(e){
+    console.error('Firebase init error:', e);
+  }
 
-  // ───────── SW registrations (APP SW solamente; FCM lo maneja waitForFcmSW) ─────────
+  try{
+    if(!window.db && firebase.firestore) window.db = firebase.firestore();
+  }catch(e){
+    console.error('Firestore init error:', e);
+  }
+
+  const messaging = (firebase.messaging ? firebase.messaging() : null);
+
+  // ───────── SW registrations ─────────
+  // APP SW (cache/offline) - normal
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', async () => {
       try {
@@ -976,26 +990,44 @@ function stepsFor(platform){
 
   // ───────── Espera/Registra SW exclusivo para FCM ─────────
   let __fcmRegPromise = null;
+
   function waitForFcmSW(){
-    if(__fcmRegPromise) return __fcmRegPromise;
+    if (__fcmRegPromise) return __fcmRegPromise;
 
-    __fcmRegPromise = new Promise(async (resolve, reject)=>{
+    __fcmRegPromise = (async () => {
       try{
-        // 1) Si ya existe, úsalo
-        if(window.fcmSW) return resolve(window.fcmSW);
+        if(!('serviceWorker' in navigator)) throw new Error('serviceWorker no disponible');
 
-        // 2) Registra explícitamente el SW de FCM (no usar ready)
+        // si ya existe, úsalo
+        if (window.fcmSW) return window.fcmSW;
+
+        // ✅ Scope SEPARADO para FCM: evita que se pise con el SW de la app
         const reg = await navigator.serviceWorker.register(
           (cfg.firebase.serviceWorkers?.fcm || './firebase-messaging-sw.js'),
-          { scope:'./' }
+          { scope: './fcm/' }
         );
 
+        // por si hay versiones viejas
+        try{ await reg.update(); }catch(_){}
+
+        // espera activación (evita errores intermitentes)
+        if(!reg.active){
+          await new Promise((resolve)=>{
+            const sw = reg.installing || reg.waiting;
+            if(!sw) return resolve();
+            sw.addEventListener('statechange', ()=>{
+              if(sw.state === 'activated') resolve();
+            });
+          });
+        }
+
         window.fcmSW = reg;
-        return resolve(reg);
+        return reg;
       }catch(err){
-        return reject(err);
+        console.error('⛔ waitForFcmSW error:', err);
+        throw err;
       }
-    });
+    })();
 
     return __fcmRegPromise;
   }
@@ -1004,8 +1036,7 @@ function stepsFor(platform){
   async function tokenDocId(token){
     const enc = new TextEncoder();
     const buf = await crypto.subtle.digest('SHA-256', enc.encode(String(token)));
-    const hex = Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
-    return hex;
+    return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
   }
 
   async function guardarTokenFCM(token){
@@ -1036,11 +1067,13 @@ function stepsFor(platform){
     if(!messaging) return null;
     if(!('Notification' in window)) return null;
     if(Notification.permission !== 'granted') return null;
+
     if(__fcmTokenPromise) return __fcmTokenPromise;
 
     __fcmTokenPromise = (async ()=>{
       try{
         const fcmReg = await waitForFcmSW();
+
         const opts = {
           vapidKey: cfg.firebase.vapidPublicKey,
           serviceWorkerRegistration: fcmReg
@@ -1048,7 +1081,6 @@ function stepsFor(platform){
 
         const token = await messaging.getToken(opts);
 
-        // Guarda local + Firestore SIEMPRE que exista token
         if(token){
           localStorage.setItem('fcm_token', token);
 
@@ -1088,6 +1120,7 @@ function stepsFor(platform){
     (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
     (window.navigator.standalone === true);
 
+  // En iOS/Android: el botón solo en PWA instalada
   nb.style.display = isStandalone ? '' : 'none';
   nb.style.pointerEvents = 'auto';
 
@@ -1119,7 +1152,7 @@ function stepsFor(platform){
   window.addEventListener('load', async () => {
     try {
       if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-        await obtenerToken();  // si el token cambió, lo vuelve a guardar
+        await obtenerToken();
         await setState();
       }
     } catch (e) {
@@ -1129,6 +1162,7 @@ function stepsFor(platform){
 
   nb.addEventListener('click', async (e)=>{
     e.preventDefault();
+
     if(typeof Notification === 'undefined'){
       alert('Este dispositivo no soporta notificaciones.');
       return;
@@ -1151,7 +1185,7 @@ function stepsFor(platform){
     }
   });
 
-  // Primer plano: guarda en bandeja interna
+  // ───────── Primer plano: forward para bandeja interna ─────────
   if(messaging){
     messaging.onMessage((payload)=>{
       try{
