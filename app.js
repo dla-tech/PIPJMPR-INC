@@ -1091,18 +1091,6 @@ function stepsFor(platform){
     }
   }
 
-  async function existeEnFirestore(token){
-    try{
-      if(!window.db) return false;
-      const col = cfg.firebase.firestore?.tokensCollection || 'fcmTokens';
-      const id  = await tokenDocId(token);
-      const snap = await window.db.collection(col).doc(id).get();
-      return !!snap.exists;
-    }catch(_){
-      return false;
-    }
-  }
-
   let __fcmTokenPromise = null;
 
   async function obtenerToken(){
@@ -1122,11 +1110,6 @@ function stepsFor(platform){
 
         const token = await messaging.getToken(opts);
 
-        // Cache local
-        if(token){
-          try{ localStorage.setItem('fcm_token', token); }catch(_){}
-        }
-
         // Guarda en Firestore SIEMPRE que exista token (y Firestore esté habilitado)
         if(token && cfg.firebase.firestore?.enabled !== false){
           await guardarTokenFCM(token);
@@ -1144,105 +1127,21 @@ function stepsFor(platform){
     return __fcmTokenPromise;
   }
 
-  // ✅ Auto-reparación SIN spam:
-  // - Solo si permission=granted
-  // - Solo si el token NO está en Firestore
-  // - Corre 1 vez por sesión + cooldown (6h)
-  async function repararTokenSiHaceFalta(reason){
-    try{
-      if(!messaging) return null;
-      if(typeof Notification === 'undefined') return null;
-      if(Notification.permission !== 'granted') return null;
-
-      const COOLDOWN_MS = 6 * 60 * 60 * 1000;
-      const LAST_KEY = 'fcm_repair_last_ts';
-
-      // 1 vez por sesión
-      if(sessionStorage.getItem('fcm_repair_ran') === '1') return null;
-
-      // cooldown global
-      const last = parseInt(localStorage.getItem(LAST_KEY) || '0', 10) || 0;
-      if((Date.now() - last) < COOLDOWN_MS) return null;
-
-      // marca ejecución
-      sessionStorage.setItem('fcm_repair_ran','1');
-      try{ localStorage.setItem(LAST_KEY, String(Date.now())); }catch(_){}
-
-      // token actual (cache o getToken)
-      const cached = (localStorage.getItem('fcm_token') || '').trim();
-      let t = (cached && cached.length > 10) ? cached : null;
-
-      if(!t){
-        t = await obtenerToken();
-        if(!t) return null;
-      }
-
-      // Si existe en Firestore → listo
-      if(cfg.firebase.firestore?.enabled !== false && window.db){
-        const ok1 = await existeEnFirestore(t);
-        if(ok1){
-          if(cfg.security?.verbose) console.log('✅ AutoRepair:', reason, 'token ok');
-          return t;
-        }
-
-        // Intento: guardar de nuevo (por timing)
-        await guardarTokenFCM(t);
-        const ok2 = await existeEnFirestore(t);
-        if(ok2){
-          if(cfg.security?.verbose) console.log('✅ AutoRepair:', reason, 'guardado ok');
-          return t;
-        }
-
-        // ÚLTIMO recurso: regenerar
-        try { await messaging.deleteToken(t); } catch(_) {}
-
-        const t2 = await obtenerToken(); // obtendrá nuevo + guardará firestore
-        if(t2){
-          await guardarTokenFCM(t2);
-          if(cfg.security?.verbose) console.log('🔄 AutoRepair:', reason, 'regenerado');
-          return t2;
-        }
-      }
-
-      return t;
-    }catch(e){
-      console.error('⛔ repararTokenSiHaceFalta:', e);
-      return null;
-    }
-  }
-
-  // ✅ Token válido = existe en Firestore (si está habilitado)
+  // ✅ Solo considera válido si EXISTE en Firestore (si Firestore está habilitado)
   async function hasValidToken(){
     try{
-      if(typeof Notification === 'undefined') return null;
-      if(Notification.permission !== 'granted') return null;
+      // OJO: aquí NO forzamos refresh automático.
+      // Solo validamos el token si ya se obtuvo por acción del usuario.
+      const cached = localStorage.getItem('fcm_token') || '';
+      const t = cached && cached.length > 10 ? cached : null;
+      if(!t) return null;
 
-      const cached = (localStorage.getItem('fcm_token') || '').trim();
-      const t = (cached && cached.length > 10) ? cached : null;
-
-      // Si no hay token local, intentamos obtener (una vez) y reparar si hace falta
-      if(!t){
-        await repararTokenSiHaceFalta('no-cache');
-        const t2 = (localStorage.getItem('fcm_token') || '').trim();
-        return (t2 && t2.length > 10) ? t2 : null;
-      }
-
-      // Si Firestore está enabled, valida contra Firestore
       if(cfg.firebase.firestore?.enabled !== false && window.db){
-        const ok = await existeEnFirestore(t);
-        if(ok) return t;
-
-        // No existe → reparar (sin spam)
-        await repararTokenSiHaceFalta('missing-doc');
-
-        const t3 = (localStorage.getItem('fcm_token') || '').trim();
-        if(t3 && t3.length > 10){
-          const ok3 = await existeEnFirestore(t3);
-          return ok3 ? t3 : null;
-        }
-        return null;
+        const col = cfg.firebase.firestore?.tokensCollection || 'fcmTokens';
+        const id  = await tokenDocId(t);
+        const snap = await window.db.collection(col).doc(id).get();
+        return snap.exists ? t : null;
       }
-
       return t;
     }catch{
       return null;
@@ -1288,25 +1187,8 @@ function stepsFor(platform){
     }
   }
 
-  // Estado inicial
+  // Estado inicial (sin forzar token)
   setState();
-
-  // ✅ Auto-init/Auto-repair al abrir:
-  // - NO pide permiso
-  // - Si ya está granted, repara solo si el doc no existe
-  window.addEventListener('load', async () => {
-    try{
-      if(typeof Notification === 'undefined') return;
-      if(Notification.permission !== 'granted'){
-        await setState();
-        return;
-      }
-      await repararTokenSiHaceFalta('load');
-      await setState();
-    }catch(e){
-      console.error('Auto-init FCM falló:', e);
-    }
-  }, { once: true });
 
   nb.addEventListener('click', async (e)=>{
     e.preventDefault();
@@ -1325,8 +1207,10 @@ function stepsFor(platform){
         : await Notification.requestPermission();
 
       if(perm === 'granted'){
-        await obtenerToken();               // genera/recupera
-        await repararTokenSiHaceFalta('ui'); // valida/firestore + repara si falta (sin spam)
+        const t = await obtenerToken();
+        if (t) {
+          try{ localStorage.setItem('fcm_token', t); }catch(_){}
+        }
       }
 
       await setState();
@@ -1334,6 +1218,29 @@ function stepsFor(platform){
       nb.classList.remove('loading');
     }
   });
+  // ✅ Auto-reenganche seguro (NO refresca tokens; solo recupera si falta)
+window.addEventListener('load', async () => {
+  try {
+    if (typeof Notification === 'undefined') return;
+    if (Notification.permission !== 'granted') return;
+
+    // Si ya hay token guardado, solo actualiza estado (NO crea token nuevo)
+    const cached = (localStorage.getItem('fcm_token') || '').trim();
+    if (cached && cached.length > 10) {
+      await setState();
+      return;
+    }
+
+    // Si NO hay token, intentamos obtener UNO (una sola vez al abrir)
+    const t = await obtenerToken();
+    if (t) {
+      try { localStorage.setItem('fcm_token', t); } catch(_) {}
+    }
+    await setState();
+  } catch (e) {
+    console.error('Auto-init FCM falló:', e);
+  }
+}, { once: true });
 
   // Primer plano: manda a bandeja interna
   if(messaging){
