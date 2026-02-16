@@ -961,23 +961,23 @@ function stepsFor(platform){
   const messaging = firebase.messaging ? firebase.messaging() : null;
 
   // SW registrations (mantén tu PWA y tu FCM separados si así lo tienes)
-  if('serviceWorker' in navigator){
-    window.addEventListener('load', ()=>{
-      // SW app (cache/offline)
-      navigator.serviceWorker.register(cfg.firebase.serviceWorkers?.app || './service-worker.js', { scope:'./' })
-        .then(reg => { window.appSW = reg; })
-        .catch(()=>{});
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    // SW app (cache/offline)
+    navigator.serviceWorker.register(cfg.firebase.serviceWorkers?.app || './service-worker.js', { scope:'./' })
+      .then(reg => { window.appSW = reg; })
+      .catch(()=>{});
 
-      // SW FCM
-      navigator.serviceWorker.register(cfg.firebase.serviceWorkers?.fcm || './firebase-messaging-sw.js', { scope:'./' })
-        .then(reg => {
-          window.fcmSW = reg;
-          // ready => referencia al SW controlador
-          navigator.serviceWorker.ready.then(r => { window.fcmSW = r; });
-        })
-        .catch(()=>{});
-    }, { once:true });
-  }
+    // SW FCM
+    navigator.serviceWorker.register(cfg.firebase.serviceWorkers?.fcm || './firebase-messaging-sw.js', { scope:'./' })
+      .then(reg => {
+        window.fcmSW = reg;
+        // ready => referencia al SW controlador
+        navigator.serviceWorker.ready.then(r => { window.fcmSW = r; });
+      })
+      .catch(()=>{});
+  }, { once:true });
+}
 
   // Espera a que exista un SW utilizable para FCM
   let __fcmRegPromise = null;
