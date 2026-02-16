@@ -1008,9 +1008,40 @@ function stepsFor(platform){
     return hex;
   }
 
+  // ✅ Indicador visual (✅/❌) sin mensajes técnicos
+  function ensureTokenIndicator(btn){
+    if(!btn) return null;
+    let ind = document.getElementById('fcm-token-indicator');
+    if(ind) return ind;
+
+    ind = document.createElement('span');
+    ind.id = 'fcm-token-indicator';
+    ind.style.cssText = `
+      margin-left:8px;
+      font:900 14px/1 system-ui,-apple-system,Segoe UI,Roboto,Arial;
+      display:inline-block;
+      vertical-align:middle;
+    `;
+    btn.insertAdjacentElement('afterend', ind);
+    return ind;
+  }
+  function setIndicator(ind, state){
+    if(!ind) return;
+    if(state === 'ok'){
+      ind.textContent = '✅';
+      ind.title = 'Token confirmado en Firestore';
+    }else if(state === 'bad'){
+      ind.textContent = '❌';
+      ind.title = 'Token NO confirmado en Firestore';
+    }else{
+      ind.textContent = '';
+      ind.title = '';
+    }
+  }
+
   async function guardarTokenFCM(token){
     try{
-      if(!window.db) return;
+      if(!window.db) return false;
 
       const ua   = navigator.userAgent || '';
       const host = location.hostname || '';
@@ -1025,8 +1056,10 @@ function stepsFor(platform){
       );
 
       if(cfg.security?.verbose) console.log('✅ Token guardado en Firestore:', id);
+      return true;
     }catch(e){
       console.error('⛔ Error guardando token FCM en Firestore:', e);
+      return false;
     }
   }
 
@@ -1048,13 +1081,9 @@ function stepsFor(platform){
 
         const token = await messaging.getToken(opts);
 
-        // Guarda local + Firestore SIEMPRE que exista token
-        if(token){
-          localStorage.setItem('fcm_token', token);
-
-          if(cfg.firebase.firestore?.enabled !== false){
-            await guardarTokenFCM(token);
-          }
+        // Guarda en Firestore SIEMPRE que exista token (y Firestore esté habilitado)
+        if(token && cfg.firebase.firestore?.enabled !== false){
+          await guardarTokenFCM(token);
         }
 
         return token || null;
@@ -1069,12 +1098,26 @@ function stepsFor(platform){
     return __fcmTokenPromise;
   }
 
+  // ✅ Solo considera válido si EXISTE en Firestore (si Firestore está habilitado)
   async function hasValidToken(){
     try{
-      const prev = localStorage.getItem('fcm_token');
-      if(prev && prev.length > 10) return prev;
       const t = await obtenerToken();
-      return t || null;
+      if(!t) return null;
+
+      if(cfg.firebase.firestore?.enabled !== false && window.db){
+        const col = cfg.firebase.firestore?.tokensCollection || 'fcmTokens';
+        const id  = await tokenDocId(t);
+
+        const snap = await window.db.collection(col).doc(id).get();
+        if(!snap.exists){
+          // Reintenta guardar y valida otra vez
+          await guardarTokenFCM(t);
+          const snap2 = await window.db.collection(col).doc(id).get();
+          if(!snap2.exists) return null;
+        }
+      }
+
+      return t;
     }catch{
       return null;
     }
@@ -1091,6 +1134,8 @@ function stepsFor(platform){
   nb.style.display = isStandalone ? '' : 'none';
   nb.style.pointerEvents = 'auto';
 
+  const indicator = ensureTokenIndicator(nb);
+
   async function setState(){
     const labels = cfg.nav?.notifButton?.labels || {};
     const p = (typeof Notification!=='undefined') ? Notification.permission : 'default';
@@ -1100,16 +1145,20 @@ function stepsFor(platform){
       if(tok){
         nb.classList.add('ok');
         nb.textContent = labels.ok || '✅ NOTIFICACIONES';
+        setIndicator(indicator, 'ok');
       }else{
         nb.classList.remove('ok');
         nb.textContent = labels.noToken || '⚠️ ACTIVAR NOTIFICACIONES';
+        setIndicator(indicator, 'bad');
       }
     }else if(p === 'denied'){
       nb.classList.remove('ok');
       nb.textContent = labels.denied || '🚫 NOTIFICACIONES';
+      setIndicator(indicator, 'bad');
     }else{
       nb.classList.remove('ok');
       nb.textContent = labels.default || 'NOTIFICACIONES';
+      setIndicator(indicator, '');
     }
   }
 
@@ -1136,6 +1185,7 @@ function stepsFor(platform){
 
     nb.classList.add('loading');
     nb.textContent = '⏳ NOTIFICACIONES';
+    setIndicator(indicator, '');
 
     try{
       const perm = (Notification.permission === 'granted')
@@ -1162,8 +1212,8 @@ function stepsFor(platform){
   // ─────────────────────────────────────────────────────────────
   (function tokenRefresher(){
     const REFRESH_KEY = 'fcm_last_refresh_ts';
-    const COOLDOWN_MS = 6 * 60 * 60 * 1000; // 6 horas (ajústalo si quieres)
-    const jitter = (ms)=> ms + Math.floor(Math.random() * 30_000); // + 0-30s
+    const COOLDOWN_MS = 6 * 60 * 60 * 1000; // 6 horas
+    const jitter = (ms)=> ms + Math.floor(Math.random() * 30_000); // +0–30s
 
     function canRun(){
       try{
@@ -1185,29 +1235,29 @@ function stepsFor(platform){
         if(!canRun()) return;
         if(!due()) return;
 
-        // marca intento ANTES (para evitar bucles si algo se queda llamando)
+        // marca intento ANTES
         try{ localStorage.setItem(REFRESH_KEY, String(Date.now())); }catch(_){}
 
-        const tok = await obtenerToken(); // ya guarda en local + Firestore si existe
+        const tok = await obtenerToken();
         if(cfg.security?.verbose) console.log('🔄 Token refresh:', reason, tok ? 'ok' : 'sin token');
+
+        // refresca estado/indicador
+        await setState();
       }catch(e){
         console.error('⛔ Token refresh error:', reason, e);
       }
     }
 
-    // 1) al cargar (con jitter pequeño)
     window.addEventListener('load', ()=>{
       setTimeout(()=>{ run('load'); }, jitter(800));
     }, { once:true });
 
-    // 2) cuando vuelve al frente
     document.addEventListener('visibilitychange', ()=>{
       if(!document.hidden){
         setTimeout(()=>{ run('visible'); }, jitter(500));
       }
     });
 
-    // 3) cuando vuelve el internet
     window.addEventListener('online', ()=>{
       setTimeout(()=>{ run('online'); }, jitter(900));
     });
