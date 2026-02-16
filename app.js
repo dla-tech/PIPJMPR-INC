@@ -1105,28 +1105,40 @@ if ('serviceWorker' in navigator) {
   nb.style.pointerEvents = 'auto';
 
   async function setState(){
-    const labels = cfg.nav?.notifButton?.labels || {};
-    const p = (typeof Notification!=='undefined') ? Notification.permission : 'default';
+  const labels = cfg.nav?.notifButton?.labels || {};
+  const p = (typeof Notification!=='undefined') ? Notification.permission : 'default';
 
-    if(p === 'granted'){
-      const tok = await hasValidToken();
-      if(tok){
-        nb.classList.add('ok');
-        nb.textContent = labels.ok || '✅ NOTIFICACIONES';
-      }else{
-        nb.classList.remove('ok');
-        nb.textContent = labels.noToken || '⚠️ ACTIVAR NOTIFICACIONES';
-      }
-    }else if(p === 'denied'){
-      nb.classList.remove('ok');
-      nb.textContent = labels.denied || '🚫 NOTIFICACIONES';
+  if(p === 'granted'){
+    const tok = await hasValidToken();
+    if(tok){
+      nb.classList.add('ok');
+      nb.textContent = labels.ok || '✅ NOTIFICACIONES';
     }else{
       nb.classList.remove('ok');
-      nb.textContent = labels.default || 'NOTIFICACIONES';
+      nb.textContent = labels.noToken || '⚠️ ACTIVAR NOTIFICACIONES';
     }
+  }else if(p === 'denied'){
+    nb.classList.remove('ok');
+    nb.textContent = labels.denied || '🚫 NOTIFICACIONES';
+  }else{
+    nb.classList.remove('ok');
+    nb.textContent = labels.default || 'NOTIFICACIONES';
   }
+}
 
-  setState();
+setState();
+
+// ✅ Auto-renovar token al abrir (si ya el permiso está concedido)
+window.addEventListener('load', async () => {
+  try {
+    if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+      await obtenerToken();  // si el token cambió, lo vuelve a guardar
+      await setState();
+    }
+  } catch (e) {
+    console.error('Error auto-renovando token:', e);
+  }
+}, { once: true });
 
   nb.addEventListener('click', async (e)=>{
     e.preventDefault();
