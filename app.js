@@ -982,47 +982,28 @@ function stepsFor(platform){
   // Espera a que exista un SW utilizable para FCM
   let __fcmRegPromise = null;
   function waitForFcmSW(){
-    if(__fcmRegPromise) return __fcmRegPromise;
+  if (__fcmRegPromise) return __fcmRegPromise;
 
-    __fcmRegPromise = new Promise(async (resolve, reject)=>{
-      try{
-        // Si ya hay uno en window, úsalo
-        if(window.fcmSW) return resolve(window.fcmSW);
+  __fcmRegPromise = new Promise(async (resolve, reject) => {
+    try {
+      // 1) si ya lo tenemos, úsalo
+      if (window.fcmSW) return resolve(window.fcmSW);
 
-        // Si hay controller, usa ready
-        if('serviceWorker' in navigator){
-          try{
-            const r = await navigator.serviceWorker.ready;
-            if(r) { window.fcmSW = r; return resolve(r); }
-          }catch(_){}
-        }
+      // 2) registra explícitamente el SW de FCM (NO usar ready)
+      const reg = await navigator.serviceWorker.register(
+        (cfg.firebase.serviceWorkers?.fcm || './firebase-messaging-sw.js'),
+        { scope: './' }
+      );
 
-        // Fallback: registra explícitamente
-        if('serviceWorker' in navigator){
-          try{
-            const reg = await navigator.serviceWorker.register(
-              (cfg.firebase.serviceWorkers?.fcm || './firebase-messaging-sw.js'),
-              { scope:'./' }
-            );
-            window.fcmSW = reg;
-            return resolve(reg);
-          }catch(_){}
-        }
+      window.fcmSW = reg;
+      resolve(reg);
+    } catch (err) {
+      reject(err);
+    }
+  });
 
-        // Último intento: polling breve
-        const start = Date.now();
-        (function poll(){
-          if(window.fcmSW) return resolve(window.fcmSW);
-          if(Date.now()-start > 2000) return reject(new Error('FCM SW no disponible'));
-          setTimeout(poll, 100);
-        })();
-      }catch(err){
-        reject(err);
-      }
-    });
-
-    return __fcmRegPromise;
-  }
+  return __fcmRegPromise;
+}
 
   // ✅ DocId seguro para Firestore (no usa token crudo)
   async function tokenDocId(token){
