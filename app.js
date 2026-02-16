@@ -949,32 +949,18 @@ function stepsFor(platform){
   window.addEventListener('appinstalled', ()=>{ btn.style.display='none'; });
 })();
 
-/* ───────── firebase-notificacion.js ─────────
-   Firebase + notifs (permiso/token UI) + forward a bandeja interna
------------------------------------------------- */
+/* ───────── Firebase + notifs (permiso/token UI) ───────── */
 (function(){
   if(!window.__CFG_ALLOWED) return;
-
   const cfg = window.APP_CONFIG;
   if(!cfg?.firebase?.app) return;
 
-  // Init Firebase (compat)
-  try{
-    if(!window.firebase?.apps?.length) firebase.initializeApp(cfg.firebase.app);
-  }catch(e){
-    console.error('Firebase init error:', e);
-  }
+  // Init Firebase compat
+  if(!window.firebase?.apps?.length) firebase.initializeApp(cfg.firebase.app);
+  if(!window.db && firebase.firestore) window.db = firebase.firestore();
+  const messaging = firebase.messaging ? firebase.messaging() : null;
 
-  try{
-    if(!window.db && firebase.firestore) window.db = firebase.firestore();
-  }catch(e){
-    console.error('Firestore init error:', e);
-  }
-
-  const messaging = (firebase.messaging ? firebase.messaging() : null);
-
-  // ───────── SW registrations ─────────
-  // APP SW (cache/offline) - normal
+  // ───────── SW registrations (APP SW solamente; FCM lo maneja waitForFcmSW) ─────────
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', async () => {
       try {
@@ -990,44 +976,26 @@ function stepsFor(platform){
 
   // ───────── Espera/Registra SW exclusivo para FCM ─────────
   let __fcmRegPromise = null;
-
   function waitForFcmSW(){
-    if (__fcmRegPromise) return __fcmRegPromise;
+    if(__fcmRegPromise) return __fcmRegPromise;
 
-    __fcmRegPromise = (async () => {
+    __fcmRegPromise = new Promise(async (resolve, reject)=>{
       try{
-        if(!('serviceWorker' in navigator)) throw new Error('serviceWorker no disponible');
+        // 1) Si ya existe, úsalo
+        if(window.fcmSW) return resolve(window.fcmSW);
 
-        // si ya existe, úsalo
-        if (window.fcmSW) return window.fcmSW;
-
-        // ✅ Scope SEPARADO para FCM: evita que se pise con el SW de la app
+        // 2) Registra explícitamente el SW de FCM (no usar ready)
         const reg = await navigator.serviceWorker.register(
           (cfg.firebase.serviceWorkers?.fcm || './firebase-messaging-sw.js'),
-          { scope: './fcm/' }
+          { scope:'./' }
         );
 
-        // por si hay versiones viejas
-        try{ await reg.update(); }catch(_){}
-
-        // espera activación (evita errores intermitentes)
-        if(!reg.active){
-          await new Promise((resolve)=>{
-            const sw = reg.installing || reg.waiting;
-            if(!sw) return resolve();
-            sw.addEventListener('statechange', ()=>{
-              if(sw.state === 'activated') resolve();
-            });
-          });
-        }
-
         window.fcmSW = reg;
-        return reg;
+        return resolve(reg);
       }catch(err){
-        console.error('⛔ waitForFcmSW error:', err);
-        throw err;
+        return reject(err);
       }
-    })();
+    });
 
     return __fcmRegPromise;
   }
@@ -1036,7 +1004,8 @@ function stepsFor(platform){
   async function tokenDocId(token){
     const enc = new TextEncoder();
     const buf = await crypto.subtle.digest('SHA-256', enc.encode(String(token)));
-    return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+    const hex = Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+    return hex;
   }
 
   async function guardarTokenFCM(token){
@@ -1067,13 +1036,11 @@ function stepsFor(platform){
     if(!messaging) return null;
     if(!('Notification' in window)) return null;
     if(Notification.permission !== 'granted') return null;
-
     if(__fcmTokenPromise) return __fcmTokenPromise;
 
     __fcmTokenPromise = (async ()=>{
       try{
         const fcmReg = await waitForFcmSW();
-
         const opts = {
           vapidKey: cfg.firebase.vapidPublicKey,
           serviceWorkerRegistration: fcmReg
@@ -1081,6 +1048,7 @@ function stepsFor(platform){
 
         const token = await messaging.getToken(opts);
 
+        // Guarda local + Firestore SIEMPRE que exista token
         if(token){
           localStorage.setItem('fcm_token', token);
 
@@ -1120,7 +1088,6 @@ function stepsFor(platform){
     (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
     (window.navigator.standalone === true);
 
-  // En iOS/Android: el botón solo en PWA instalada
   nb.style.display = isStandalone ? '' : 'none';
   nb.style.pointerEvents = 'auto';
 
@@ -1152,7 +1119,7 @@ function stepsFor(platform){
   window.addEventListener('load', async () => {
     try {
       if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-        await obtenerToken();
+        await obtenerToken();  // si el token cambió, lo vuelve a guardar
         await setState();
       }
     } catch (e) {
@@ -1162,7 +1129,6 @@ function stepsFor(platform){
 
   nb.addEventListener('click', async (e)=>{
     e.preventDefault();
-
     if(typeof Notification === 'undefined'){
       alert('Este dispositivo no soporta notificaciones.');
       return;
@@ -1185,7 +1151,69 @@ function stepsFor(platform){
     }
   });
 
-  // ───────── Primer plano: forward para bandeja interna ─────────
+  // ─────────────────────────────────────────────────────────────
+  // ✅ REFRESCADOR DE TOKENS (SEGURO, SIN ROMPER PWA)
+  // - No borra tokens (no deleteToken)
+  // - Solo intenta re-obtener y re-guardar cuando:
+  //   a) la app se abre
+  //   b) la app vuelve al frente (visibilitychange)
+  //   c) vuelve el internet (online)
+  // - Con "cooldown" para no spammear Firestore
+  // ─────────────────────────────────────────────────────────────
+  (function tokenRefresher(){
+    const REFRESH_KEY = 'fcm_last_refresh_ts';
+    const COOLDOWN_MS = 6 * 60 * 60 * 1000; // 6 horas (ajústalo si quieres)
+    const jitter = (ms)=> ms + Math.floor(Math.random() * 30_000); // + 0-30s
+
+    function canRun(){
+      try{
+        if(typeof Notification === 'undefined') return false;
+        if(Notification.permission !== 'granted') return false;
+        return true;
+      }catch(_){ return false; }
+    }
+
+    function due(){
+      try{
+        const last = parseInt(localStorage.getItem(REFRESH_KEY) || '0', 10) || 0;
+        return (Date.now() - last) > COOLDOWN_MS;
+      }catch(_){ return true; }
+    }
+
+    async function run(reason){
+      try{
+        if(!canRun()) return;
+        if(!due()) return;
+
+        // marca intento ANTES (para evitar bucles si algo se queda llamando)
+        try{ localStorage.setItem(REFRESH_KEY, String(Date.now())); }catch(_){}
+
+        const tok = await obtenerToken(); // ya guarda en local + Firestore si existe
+        if(cfg.security?.verbose) console.log('🔄 Token refresh:', reason, tok ? 'ok' : 'sin token');
+      }catch(e){
+        console.error('⛔ Token refresh error:', reason, e);
+      }
+    }
+
+    // 1) al cargar (con jitter pequeño)
+    window.addEventListener('load', ()=>{
+      setTimeout(()=>{ run('load'); }, jitter(800));
+    }, { once:true });
+
+    // 2) cuando vuelve al frente
+    document.addEventListener('visibilitychange', ()=>{
+      if(!document.hidden){
+        setTimeout(()=>{ run('visible'); }, jitter(500));
+      }
+    });
+
+    // 3) cuando vuelve el internet
+    window.addEventListener('online', ()=>{
+      setTimeout(()=>{ run('online'); }, jitter(900));
+    });
+  })();
+
+  // Primer plano: guarda en bandeja interna
   if(messaging){
     messaging.onMessage((payload)=>{
       try{
