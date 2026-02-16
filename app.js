@@ -960,58 +960,45 @@ function stepsFor(platform){
   if(!window.db && firebase.firestore) window.db = firebase.firestore();
   const messaging = firebase.messaging ? firebase.messaging() : null;
 
-// SW registrations (mantén tu PWA y tu FCM separados)
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', async () => {
+  // ───────── SW registrations (APP SW solamente; FCM lo maneja waitForFcmSW) ─────────
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', async () => {
+      try {
+        window.appSW = await navigator.serviceWorker.register(
+          cfg.firebase.serviceWorkers?.app || './service-worker.js',
+          { scope: './' }
+        );
+      } catch (e) {
+        console.error('Error registrando SW app:', e);
+      }
+    }, { once: true });
+  }
 
-    // 1️⃣ SW de la app (cache/offline)
-    try {
-      window.appSW = await navigator.serviceWorker.register(
-        cfg.firebase.serviceWorkers?.app || './service-worker.js',
-        { scope: './' }
-      );
-    } catch (e) {
-      console.error('Error registrando SW app:', e);
-    }
-
-    // 2️⃣ SW exclusivo para FCM
-    try {
-      window.fcmSW = await navigator.serviceWorker.register(
-        cfg.firebase.serviceWorkers?.fcm || './firebase-messaging-sw.js',
-        { scope: './' }
-      );
-    } catch (e) {
-      console.error('Error registrando SW FCM:', e);
-    }
-
-  }, { once: true });
-}
-
-  // Espera a que exista un SW utilizable para FCM
+  // ───────── Espera/Registra SW exclusivo para FCM ─────────
   let __fcmRegPromise = null;
   function waitForFcmSW(){
-  if (__fcmRegPromise) return __fcmRegPromise;
+    if(__fcmRegPromise) return __fcmRegPromise;
 
-  __fcmRegPromise = new Promise(async (resolve, reject) => {
-    try {
-      // 1) si ya lo tenemos, úsalo
-      if (window.fcmSW) return resolve(window.fcmSW);
+    __fcmRegPromise = new Promise(async (resolve, reject)=>{
+      try{
+        // 1) Si ya existe, úsalo
+        if(window.fcmSW) return resolve(window.fcmSW);
 
-      // 2) registra explícitamente el SW de FCM (NO usar ready)
-      const reg = await navigator.serviceWorker.register(
-        (cfg.firebase.serviceWorkers?.fcm || './firebase-messaging-sw.js'),
-        { scope: './' }
-      );
+        // 2) Registra explícitamente el SW de FCM (no usar ready)
+        const reg = await navigator.serviceWorker.register(
+          (cfg.firebase.serviceWorkers?.fcm || './firebase-messaging-sw.js'),
+          { scope:'./' }
+        );
 
-      window.fcmSW = reg;
-      resolve(reg);
-    } catch (err) {
-      reject(err);
-    }
-  });
+        window.fcmSW = reg;
+        return resolve(reg);
+      }catch(err){
+        return reject(err);
+      }
+    });
 
-  return __fcmRegPromise;
-}
+    return __fcmRegPromise;
+  }
 
   // ✅ DocId seguro para Firestore (no usa token crudo)
   async function tokenDocId(token){
@@ -1093,7 +1080,7 @@ if ('serviceWorker' in navigator) {
     }
   }
 
-  // UI button (activar notificaciones)
+  // ───────── UI button (activar notificaciones) ─────────
   const nb = document.getElementById(cfg.nav?.notifButton?.id || 'btn-notifs');
   if(!nb) return;
 
@@ -1105,40 +1092,40 @@ if ('serviceWorker' in navigator) {
   nb.style.pointerEvents = 'auto';
 
   async function setState(){
-  const labels = cfg.nav?.notifButton?.labels || {};
-  const p = (typeof Notification!=='undefined') ? Notification.permission : 'default';
+    const labels = cfg.nav?.notifButton?.labels || {};
+    const p = (typeof Notification!=='undefined') ? Notification.permission : 'default';
 
-  if(p === 'granted'){
-    const tok = await hasValidToken();
-    if(tok){
-      nb.classList.add('ok');
-      nb.textContent = labels.ok || '✅ NOTIFICACIONES';
+    if(p === 'granted'){
+      const tok = await hasValidToken();
+      if(tok){
+        nb.classList.add('ok');
+        nb.textContent = labels.ok || '✅ NOTIFICACIONES';
+      }else{
+        nb.classList.remove('ok');
+        nb.textContent = labels.noToken || '⚠️ ACTIVAR NOTIFICACIONES';
+      }
+    }else if(p === 'denied'){
+      nb.classList.remove('ok');
+      nb.textContent = labels.denied || '🚫 NOTIFICACIONES';
     }else{
       nb.classList.remove('ok');
-      nb.textContent = labels.noToken || '⚠️ ACTIVAR NOTIFICACIONES';
+      nb.textContent = labels.default || 'NOTIFICACIONES';
     }
-  }else if(p === 'denied'){
-    nb.classList.remove('ok');
-    nb.textContent = labels.denied || '🚫 NOTIFICACIONES';
-  }else{
-    nb.classList.remove('ok');
-    nb.textContent = labels.default || 'NOTIFICACIONES';
   }
-}
 
-setState();
+  setState();
 
-// ✅ Auto-renovar token al abrir (si ya el permiso está concedido)
-window.addEventListener('load', async () => {
-  try {
-    if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-      await obtenerToken();  // si el token cambió, lo vuelve a guardar
-      await setState();
+  // ✅ Auto-renovar token al abrir (si ya el permiso está concedido)
+  window.addEventListener('load', async () => {
+    try {
+      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        await obtenerToken();  // si el token cambió, lo vuelve a guardar
+        await setState();
+      }
+    } catch (e) {
+      console.error('Error auto-renovando token:', e);
     }
-  } catch (e) {
-    console.error('Error auto-renovando token:', e);
-  }
-}, { once: true });
+  }, { once: true });
 
   nb.addEventListener('click', async (e)=>{
     e.preventDefault();
