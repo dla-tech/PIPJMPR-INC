@@ -61,14 +61,12 @@ function buildNotifUrl(title, body, extra){
 
 // Mensajes en background
 messaging.onBackgroundMessage((payload) => {
-  // Si viene "notification", evita duplicados (el navegador la maneja).
-  // Aun así, el click lo manejamos abajo en notificationclick.
-  if (payload?.notification) return;
+  // Normaliza para soportar payload.notification y payload.data
+  const d  = payload?.data || {};
+  const pn = payload?.notification || {};
 
-  // Data message
-  const d = payload?.data || {};
-  const title = d.title || 'Notificación';
-  const body  = d.body  || '';
+  const title = d.title || pn.title || 'Notificación';
+  const body  = d.body  || pn.body  || '';
 
   // Extrae patrones del body si no llegan como claves separadas
   const found = extractPatterns(body);
@@ -80,6 +78,24 @@ messaging.onBackgroundMessage((payload) => {
 
   const url = d.url || buildNotifUrl(title, body, meta);
 
+  // ✅ SIEMPRE avisar a la app (si está abierta) para que la campanita la guarde
+  broadcastToClients({
+    type: 'notif:new',
+    payload: {
+      title,
+      body,
+      date:  meta.date,
+      image: meta.image,
+      link:  meta.link,
+      ts: Date.now()
+    }
+  });
+
+  // ✅ Evitar duplicados: si viene payload.notification, NO mostramos showNotification aquí
+  //    porque el navegador/FCM puede mostrarla automáticamente.
+  if (payload?.notification) return;
+
+  // Data message: mostramos la notificación nosotros
   const options = {
     body,
     icon:  d.icon  || DEFAULT_ICON,
@@ -95,20 +111,7 @@ messaging.onBackgroundMessage((payload) => {
     }
   };
 
-  // Mostrar notificación
   self.registration.showNotification(title, options);
-
-  // ✅ Avisar a la app (si está abierta) para que la campanita la guarde
-  broadcastToClients({
-    type: 'notif:new',
-    payload: {
-      title,
-      body,
-      date:  meta.date,
-      image: meta.image,
-      link:  meta.link
-    }
-  });
 });
 
 // Click en la notificación
