@@ -960,7 +960,7 @@ function stepsFor(platform){
   if(!window.db && firebase.firestore) window.db = firebase.firestore();
   const messaging = firebase.messaging ? firebase.messaging() : null;
 
-  // ───────── SW registrations (APP SW solamente; FCM lo maneja waitForFcmSW) ─────────
+  // ───────── SW registrations (APP SW solamente) ─────────
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', async () => {
       try {
@@ -974,28 +974,57 @@ function stepsFor(platform){
     }, { once: true });
   }
 
-  // ───────── Espera/Registra SW exclusivo para FCM ─────────
+  // ───────── Registrar/Esperar SW exclusivo para FCM ─────────
   let __fcmRegPromise = null;
+
+  async function waitForActiveSW(reg, timeoutMs = 10000){
+    if (reg?.active) return reg.active;
+
+    return await new Promise((resolve, reject) => {
+      const t = setTimeout(() => reject(new Error('FCM SW no activó a tiempo')), timeoutMs);
+
+      const check = () => {
+        if (reg.active){
+          clearTimeout(t);
+          resolve(reg.active);
+        }
+      };
+
+      if (reg.installing) reg.installing.addEventListener('statechange', check);
+      if (reg.waiting)    reg.waiting.addEventListener('statechange', check);
+
+      const iv = setInterval(() => {
+        if (reg.active){
+          clearInterval(iv);
+          clearTimeout(t);
+          resolve(reg.active);
+        }
+      }, 200);
+    });
+  }
+
   function waitForFcmSW(){
     if(__fcmRegPromise) return __fcmRegPromise;
 
-    __fcmRegPromise = new Promise(async (resolve, reject)=>{
-      try{
-        // 1) Si ya existe, úsalo
-        if(window.fcmSW) return resolve(window.fcmSW);
+    __fcmRegPromise = (async ()=>{
+      // 1) Si ya existe, úsalo
+      if(window.fcmSW) return window.fcmSW;
 
-        // 2) Registra explícitamente el SW de FCM (no usar ready)
-        const reg = await navigator.serviceWorker.register(
-          (cfg.firebase.serviceWorkers?.fcm || './firebase-messaging-sw.js'),
-          { scope:'./' }
-        );
+      // 2) Registra explícitamente el SW de FCM
+      const reg = await navigator.serviceWorker.register(
+        (cfg.firebase.serviceWorkers?.fcm || './firebase-messaging-sw.js'),
+        { scope:'./' }
+      );
 
-        window.fcmSW = reg;
-        return resolve(reg);
-      }catch(err){
-        return reject(err);
-      }
-    });
+      // 3) Asegura que esté ACTIVO antes de usarlo
+      await waitForActiveSW(reg);
+
+      // (opcional) intenta update para evitar SW cacheado viejo
+      try { await reg.update(); } catch(_) {}
+
+      window.fcmSW = reg;
+      return reg;
+    })();
 
     return __fcmRegPromise;
   }
@@ -1004,8 +1033,7 @@ function stepsFor(platform){
   async function tokenDocId(token){
     const enc = new TextEncoder();
     const buf = await crypto.subtle.digest('SHA-256', enc.encode(String(token)));
-    const hex = Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
-    return hex;
+    return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
   }
 
   // ✅ Indicador visual (✅/❌) sin mensajes técnicos
@@ -1074,6 +1102,7 @@ function stepsFor(platform){
     __fcmTokenPromise = (async ()=>{
       try{
         const fcmReg = await waitForFcmSW();
+
         const opts = {
           vapidKey: cfg.firebase.vapidPublicKey,
           serviceWorkerRegistration: fcmReg
@@ -1101,22 +1130,18 @@ function stepsFor(platform){
   // ✅ Solo considera válido si EXISTE en Firestore (si Firestore está habilitado)
   async function hasValidToken(){
     try{
-      const t = await obtenerToken();
+      // OJO: aquí NO forzamos refresh automático.
+      // Solo validamos el token si ya se obtuvo por acción del usuario.
+      const cached = localStorage.getItem('fcm_token') || '';
+      const t = cached && cached.length > 10 ? cached : null;
       if(!t) return null;
 
       if(cfg.firebase.firestore?.enabled !== false && window.db){
         const col = cfg.firebase.firestore?.tokensCollection || 'fcmTokens';
         const id  = await tokenDocId(t);
-
         const snap = await window.db.collection(col).doc(id).get();
-        if(!snap.exists){
-          // Reintenta guardar y valida otra vez
-          await guardarTokenFCM(t);
-          const snap2 = await window.db.collection(col).doc(id).get();
-          if(!snap2.exists) return null;
-        }
+        return snap.exists ? t : null;
       }
-
       return t;
     }catch{
       return null;
@@ -1162,19 +1187,8 @@ function stepsFor(platform){
     }
   }
 
+  // Estado inicial (sin forzar token)
   setState();
-
-  // ✅ Auto-renovar token al abrir (si ya el permiso está concedido)
-  window.addEventListener('load', async () => {
-    try {
-      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-        await obtenerToken();  // si el token cambió, lo vuelve a guardar
-        await setState();
-      }
-    } catch (e) {
-      console.error('Error auto-renovando token:', e);
-    }
-  }, { once: true });
 
   nb.addEventListener('click', async (e)=>{
     e.preventDefault();
@@ -1193,77 +1207,19 @@ function stepsFor(platform){
         : await Notification.requestPermission();
 
       if(perm === 'granted'){
-        await obtenerToken();
+        const t = await obtenerToken();
+        if (t) {
+          try{ localStorage.setItem('fcm_token', t); }catch(_){}
+        }
       }
+
       await setState();
     }finally{
       nb.classList.remove('loading');
     }
   });
 
-  // ─────────────────────────────────────────────────────────────
-  // ✅ REFRESCADOR DE TOKENS (SEGURO, SIN ROMPER PWA)
-  // - No borra tokens (no deleteToken)
-  // - Solo intenta re-obtener y re-guardar cuando:
-  //   a) la app se abre
-  //   b) la app vuelve al frente (visibilitychange)
-  //   c) vuelve el internet (online)
-  // - Con "cooldown" para no spammear Firestore
-  // ─────────────────────────────────────────────────────────────
-  (function tokenRefresher(){
-    const REFRESH_KEY = 'fcm_last_refresh_ts';
-    const COOLDOWN_MS = 6 * 60 * 60 * 1000; // 6 horas
-    const jitter = (ms)=> ms + Math.floor(Math.random() * 30_000); // +0–30s
-
-    function canRun(){
-      try{
-        if(typeof Notification === 'undefined') return false;
-        if(Notification.permission !== 'granted') return false;
-        return true;
-      }catch(_){ return false; }
-    }
-
-    function due(){
-      try{
-        const last = parseInt(localStorage.getItem(REFRESH_KEY) || '0', 10) || 0;
-        return (Date.now() - last) > COOLDOWN_MS;
-      }catch(_){ return true; }
-    }
-
-    async function run(reason){
-      try{
-        if(!canRun()) return;
-        if(!due()) return;
-
-        // marca intento ANTES
-        try{ localStorage.setItem(REFRESH_KEY, String(Date.now())); }catch(_){}
-
-        const tok = await obtenerToken();
-        if(cfg.security?.verbose) console.log('🔄 Token refresh:', reason, tok ? 'ok' : 'sin token');
-
-        // refresca estado/indicador
-        await setState();
-      }catch(e){
-        console.error('⛔ Token refresh error:', reason, e);
-      }
-    }
-
-    window.addEventListener('load', ()=>{
-      setTimeout(()=>{ run('load'); }, jitter(800));
-    }, { once:true });
-
-    document.addEventListener('visibilitychange', ()=>{
-      if(!document.hidden){
-        setTimeout(()=>{ run('visible'); }, jitter(500));
-      }
-    });
-
-    window.addEventListener('online', ()=>{
-      setTimeout(()=>{ run('online'); }, jitter(900));
-    });
-  })();
-
-  // Primer plano: guarda en bandeja interna
+  // Primer plano: manda a bandeja interna
   if(messaging){
     messaging.onMessage((payload)=>{
       try{
