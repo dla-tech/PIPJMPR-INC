@@ -949,324 +949,232 @@ function stepsFor(platform){
   window.addEventListener('appinstalled', ()=>{ btn.style.display='none'; });
 })();
 
-/* ───────── Firebase + notifs (permiso/token UI) ───────── */
+/* ───────── Bandeja interna + badge (campanita SOLO PWA) ───────── */
 (function(){
   if(!window.__CFG_ALLOWED) return;
-  const cfg = window.APP_CONFIG;
-  if(!cfg?.firebase?.app) return;
 
-  // Evita que el módulo corra dos veces (MUY IMPORTANTE)
-  if (window.__FCM_UI_READY) return;
-  window.__FCM_UI_READY = true;
-
-  // Init Firebase compat (solo 1 vez)
-  if(!window.firebase?.apps?.length) firebase.initializeApp(cfg.firebase.app);
-  if(!window.db && firebase.firestore) window.db = firebase.firestore();
-
-  const messaging = firebase.messaging ? firebase.messaging() : null;
-  if(!messaging) return;
-
-  // ───────── SW registrations (APP SW) ─────────
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', async () => {
-      try {
-        window.appSW = await navigator.serviceWorker.register(
-          cfg.firebase.serviceWorkers?.app || './service-worker.js',
-          { scope: './' }
-        );
-      } catch (e) {
-        console.error('Error registrando SW app:', e);
-      }
-    }, { once: true });
-  }
-
-  // ───────── FCM SW: registrar y asegurar ACTIVE ─────────
-  let __fcmRegPromise = null;
-
-  async function waitForActiveSW(reg, timeoutMs = 12000){
-    if (reg?.active) return reg.active;
-
-    return await new Promise((resolve, reject) => {
-      const t = setTimeout(() => reject(new Error('FCM SW no activó a tiempo')), timeoutMs);
-
-      const check = () => {
-        if (reg.active){
-          clearTimeout(t);
-          resolve(reg.active);
-        }
-      };
-
-      if (reg.installing) reg.installing.addEventListener('statechange', check);
-      if (reg.waiting)    reg.waiting.addEventListener('statechange', check);
-
-      const iv = setInterval(() => {
-        if (reg.active){
-          clearInterval(iv);
-          clearTimeout(t);
-          resolve(reg.active);
-        }
-      }, 200);
-    });
-  }
-
-  function waitForFcmSW(){
-    if(__fcmRegPromise) return __fcmRegPromise;
-
-    __fcmRegPromise = (async ()=>{
-      // 1) si ya existe, úsalo
-      if(window.fcmSW) return window.fcmSW;
-
-      // 2) registra el SW de FCM
-      const reg = await navigator.serviceWorker.register(
-        (cfg.firebase.serviceWorkers?.fcm || './firebase-messaging-sw.js'),
-        { scope:'./' }
-      );
-
-      // 3) asegúrate que esté ACTIVE antes del getToken
-      await waitForActiveSW(reg);
-
-      // 4) intenta update para evitar SW viejo cacheado
-      try { await reg.update(); } catch(_) {}
-
-      window.fcmSW = reg;
-      return reg;
-    })();
-
-    return __fcmRegPromise;
-  }
-
-  // ✅ DocId seguro para Firestore (no usa token crudo)
-  async function tokenDocId(token){
-    const enc = new TextEncoder();
-    const buf = await crypto.subtle.digest('SHA-256', enc.encode(String(token)));
-    return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
-  }
-
-  // ✅ Indicador visual (✅/❌) sin mensajes técnicos
-  function ensureTokenIndicator(btn){
-    if(!btn) return null;
-    let ind = document.getElementById('fcm-token-indicator');
-    if(ind) return ind;
-
-    ind = document.createElement('span');
-    ind.id = 'fcm-token-indicator';
-    ind.style.cssText = `
-      margin-left:8px;
-      font:900 14px/1 system-ui,-apple-system,Segoe UI,Roboto,Arial;
-      display:inline-block;
-      vertical-align:middle;
-    `;
-    btn.insertAdjacentElement('afterend', ind);
-    return ind;
-  }
-  function setIndicator(ind, state){
-    if(!ind) return;
-    if(state === 'ok'){
-      ind.textContent = '✅';
-      ind.title = 'Token confirmado';
-    }else if(state === 'bad'){
-      ind.textContent = '❌';
-      ind.title = 'Token NO confirmado';
-    }else{
-      ind.textContent = '';
-      ind.title = '';
+  const cfg = window.APP_CONFIG || {};
+  const inboxCfg = cfg.inbox || {
+    enabled: true,
+    storageKey:'notifs',
+    maxItems:200,
+    badgeMax:9,
+    ui:{
+      title:'Notificaciones',
+      markAllLabel:'Marcar leídas',
+      closeLabel:'Cerrar',
+      openLabel:'Abrir',
+      deleteLabel:'Borrar',
+      emptyText:'Sin notificaciones'
     }
-  }
+  };
+  if (inboxCfg.enabled === false) return;
 
-  async function guardarTokenFCM(token){
-    try{
-      if(!window.db) return false;
-
-      const ua   = navigator.userAgent || '';
-      const host = location.hostname || '';
-      const ts   = new Date().toISOString();
-
-      const id  = await tokenDocId(token);
-      const col = cfg.firebase.firestore?.tokensCollection || 'fcmTokens';
-
-      // Guardamos token dentro del doc (doc.id = hash)
-      await window.db.collection(col).doc(id).set(
-        { token, ua, host, ts, updatedAt: ts },
-        { merge:true }
-      );
-
-      return true;
-    }catch(e){
-      console.error('⛔ Error guardando token FCM en Firestore:', e);
-      return false;
-    }
-  }
-
-  // ───────── Token (manual / sin auto-spam) ─────────
-  let __fcmTokenPromise = null;
-
-  async function obtenerTokenYGuardar(){
-    if(!('Notification' in window)) return null;
-    if(Notification.permission !== 'granted') return null;
-    if(__fcmTokenPromise) return __fcmTokenPromise;
-
-    __fcmTokenPromise = (async ()=>{
-      try{
-        const fcmReg = await waitForFcmSW();
-
-        const opts = {
-          vapidKey: cfg.firebase.vapidPublicKey,
-          serviceWorkerRegistration: fcmReg
-        };
-
-        const token = await messaging.getToken(opts);
-
-        if(token){
-          try{ localStorage.setItem('fcm_token', token); }catch(_){}
-
-          if(cfg.firebase.firestore?.enabled !== false){
-            await guardarTokenFCM(token);
-          }
-        }
-
-        return token || null;
-      }catch(e){
-        console.error('⛔ getToken FCM:', e);
-        return null;
-      }finally{
-        __fcmTokenPromise = null;
-      }
-    })();
-
-    return __fcmTokenPromise;
-  }
-
-  // ✅ Validación suave: no crea token nuevo si no existe
-  async function hasValidToken(){
-    try{
-      const cached = localStorage.getItem('fcm_token') || '';
-      if(!cached || cached.length < 10) return null;
-
-      if(cfg.firebase.firestore?.enabled !== false && window.db){
-        const col = cfg.firebase.firestore?.tokensCollection || 'fcmTokens';
-        const id  = await tokenDocId(cached);
-        const snap = await window.db.collection(col).doc(id).get();
-
-        // si no está, lo re-guardamos (1 sola vez) sin “generar token nuevo”
-        if(!snap.exists){
-          await guardarTokenFCM(cached);
-          const snap2 = await window.db.collection(col).doc(id).get();
-          if(!snap2.exists) return null;
-        }
-      }
-
-      return cached;
-    }catch{
-      return null;
-    }
-  }
-
-  // ───────── UI button (activar notificaciones) ─────────
-  const nb = document.getElementById(cfg.nav?.notifButton?.id || 'btn-notifs');
-  if(!nb) return;
-
+  // Detecta PWA instalada (la UI solo aparece ahí)
   const isStandalone =
     (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
     (window.navigator.standalone === true);
 
-  nb.style.display = isStandalone ? '' : 'none';
-  nb.style.pointerEvents = 'auto';
+  // === Storage (activo SIEMPRE)
+  const KEY = inboxCfg.storageKey || 'notifs';
+  const MAX = +inboxCfg.maxItems > 0 ? +inboxCfg.maxItems : 200;
 
-  const indicator = ensureTokenIndicator(nb);
+  const load = () => { try { return JSON.parse(localStorage.getItem(KEY)||'[]'); } catch { return []; } };
+  const save = (list) => { try { localStorage.setItem(KEY, JSON.stringify(list.slice(0, MAX))); } catch {} };
 
-  async function setState(){
-    const labels = cfg.nav?.notifButton?.labels || {};
-    const p = (typeof Notification!=='undefined') ? Notification.permission : 'default';
-
-    if(p === 'granted'){
-      const tok = await hasValidToken();
-      if(tok){
-        nb.classList.add('ok');
-        nb.textContent = labels.ok || '✅ NOTIFICACIONES';
-        setIndicator(indicator, 'ok');
-      }else{
-        nb.classList.remove('ok');
-        nb.textContent = labels.noToken || '⚠️ ACTIVAR NOTIFICACIONES';
-        setIndicator(indicator, 'bad');
-      }
-    }else if(p === 'denied'){
-      nb.classList.remove('ok');
-      nb.textContent = labels.denied || '🚫 NOTIFICACIONES';
-      setIndicator(indicator, 'bad');
-    }else{
-      nb.classList.remove('ok');
-      nb.textContent = labels.default || 'NOTIFICACIONES';
-      setIndicator(indicator, '');
-    }
+  // ✅ Normaliza y asigna ID siempre
+  function normalize(n){
+    const now = Date.now();
+    const id = (n && (n.id || n.messageId || n.fcmMessageId)) || (now + '-' + Math.random().toString(36).slice(2,8));
+    return {
+      id:    String(id),
+      ts:    +n?.ts || now,
+      title: String(n?.title||'Notificación').slice(0,140),
+      body:  String(n?.body||''),
+      date:  String(n?.date||''),
+      image: n?.image || '',
+      link:  n?.link  || '',
+      read:  !!n?.read
+    };
   }
 
-  // Estado inicial
-  setState();
+  // ✅ Dedupe real: SOLO si llega el mismo ID otra vez (por SW + foreground, etc.)
+  function add(n){
+    const list = load();
+    const item = normalize(n);
 
-  // Si ya está granted y NO hay token guardado, lo crea 1 vez (primer setup)
-  window.addEventListener('load', async ()=>{
-    try{
-      if(typeof Notification !== 'undefined' && Notification.permission === 'granted'){
-        const cached = localStorage.getItem('fcm_token') || '';
-        if(!cached || cached.length < 10){
-          await obtenerTokenYGuardar();
-        }
-        await setState();
-      }
-    }catch(_){}
-  }, { once:true });
+    const exists = list.find(x => x.id === item.id);
+    if (!exists) {
+      list.unshift(item);
+      save(list);
+      return item;
+    }
+    // Si ya existe, puedes actualizar campos por si llegaron más completos
+    const idx = list.findIndex(x => x.id === item.id);
+    if (idx >= 0){
+      list[idx] = { ...list[idx], ...item };
+      save(list);
+    }
+    return list[idx] || item;
+  }
 
-  // Click del botón: aquí sí generamos/guardamos token
-  nb.addEventListener('click', async (e)=>{
-    e.preventDefault();
-    if(typeof Notification === 'undefined'){
-      alert('Este dispositivo no soporta notificaciones.');
+  const markAllRead = ()=>{
+    const a=load();
+    a.forEach(x=>x.read=true);
+    save(a);
+    return a;
+  };
+
+  const delById = (id)=>{
+    const a=load().filter(x=>x.id!==id);
+    save(a);
+    return a;
+  };
+
+  // === UI: campana flotante + badge (SOLO si es standalone)
+  let bell=null, badge=null, panel=null;
+
+  if (isStandalone) {
+    bell = document.createElement('button');
+    bell.id='notif-bell';
+    bell.setAttribute('aria-label','Bandeja de notificaciones');
+    bell.innerHTML='🔔';
+    bell.style.cssText='position:fixed;right:16px;bottom:16px;width:52px;height:52px;border-radius:999px;border:0;background:#111;color:#fff;font-size:22px;box-shadow:0 10px 30px rgba(0,0,0,.25);z-index:100002';
+    document.body.appendChild(bell);
+
+    badge = document.createElement('span');
+    badge.id='notif-badge';
+    badge.style.cssText='position:absolute;top:-6px;right:-4px;background:#ef4444;color:#fff;border-radius:999px;padding:2px 7px;font:700 11px system-ui;line-height:1;display:none';
+    bell.appendChild(badge);
+
+    panel = document.createElement('div');
+    panel.id = 'notif-panel';
+    panel.style.cssText = 'position:fixed;bottom:76px;right:16px;width:min(92vw,420px);max-height:70vh;overflow:auto;background:#fff;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.2);display:none;z-index:100001';
+    panel.innerHTML = `
+      <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid #eee;position:sticky;top:0;background:#fff;border-top-left-radius:12px;border-top-right-radius:12px">
+        <strong style="font:700 14px system-ui">${inboxCfg.ui?.title||'Notificaciones'}</strong>
+        <span style="margin-left:auto"></span>
+        <button id="notif-markall" style="background:#111;color:#fff;border:0;border-radius:8px;padding:6px 10px">${inboxCfg.ui?.markAllLabel||'Marcar leídas'}</button>
+        <button id="notif-closep" style="background:#6b7280;color:#fff;border:0;border-radius:8px;padding:6px 10px">${inboxCfg.ui?.closeLabel||'Cerrar'}</button>
+      </div>
+      <div id="notif-list" style="padding:8px 0"></div>
+    `;
+    document.body.appendChild(panel);
+
+    const openPanel = ()=>{ render(); panel.style.display='block'; };
+    const closePanel= ()=>{ panel.style.display='none'; };
+
+    bell.addEventListener('click', ()=>{ panel.style.display==='block'?closePanel():openPanel(); });
+    document.getElementById('notif-markall')?.addEventListener('click', ()=>{ save(markAllRead()); render(); updateBadge(); });
+    document.getElementById('notif-closep')?.addEventListener('click', closePanel);
+  }
+
+  function esc(s){ return String(s).replace(/[&<>"]/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;' }[c])); }
+
+  function render(){
+    const list = load();
+    const box  = document.getElementById('notif-list');
+    if (!box){ return; }
+    box.innerHTML = '';
+    if (!list.length) {
+      box.innerHTML = `<div style="padding:14px;color:#6b7280">${inboxCfg.ui?.emptyText||'Sin notificaciones'}</div>`;
       return;
     }
+    for (const n of list) {
+      const row = document.createElement('div');
+      row.style.cssText = `padding:10px 12px;border-bottom:1px solid #eee;${n.read?'opacity:.65':''}`;
+      row.innerHTML = `
+        <div style="display:flex;gap:8px;align-items:baseline">
+          <strong style="font:700 14px system-ui;flex:1">${esc(n.title)}</strong>
+          <small style="color:#6b7280">${new Date(n.ts).toLocaleString()}</small>
+        </div>
+        <div style="font:400 13px/1.5 system-ui;white-space:pre-wrap;margin:4px 0 8px">${esc(n.body)}</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button data-id="${n.id}" data-act="open" style="background:#2563eb;color:#fff;border:0;border-radius:8px;padding:6px 10px">${inboxCfg.ui?.openLabel||'Abrir'}</button>
+          <button data-id="${n.id}" data-act="del"  style="background:#dc2626;color:#fff;border:0;border-radius:8px;padding:6px 10px">${inboxCfg.ui?.deleteLabel||'Borrar'}</button>
+        </div>`;
+      box.appendChild(row);
+    }
+  }
 
-    nb.classList.add('loading');
-    nb.textContent = '⏳ NOTIFICACIONES';
-    setIndicator(indicator, '');
+  // Badge
+  const BADGE_MAX = +inboxCfg.badgeMax > 0 ? +inboxCfg.badgeMax : 9;
+  function updateBadge(){
+    if (!badge) return;
+    const c = load().filter(x=>!x.read).length;
+    if (c>0){ badge.textContent = c > BADGE_MAX ? (BADGE_MAX + '+') : String(c); badge.style.display=''; }
+    else { badge.style.display='none'; }
+  }
 
-    try{
-      const perm = (Notification.permission === 'granted')
-        ? 'granted'
-        : await Notification.requestPermission();
-
-      if(perm === 'granted'){
-        await obtenerTokenYGuardar();
+  // Mensajes del SW → guarda nuevas
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('message', (ev)=>{
+      const d = ev.data || {};
+      if (d.type === 'notif:new' && d.payload) {
+        add(d.payload);
+        updateBadge();
       }
-
-      await setState();
-    }finally{
-      nb.classList.remove('loading');
-    }
-  });
-
-  // Primer plano: manda a bandeja interna (campana)
-  messaging.onMessage((payload)=>{
-    try{
-      const d = payload?.data || {};
-      window.dispatchEvent(new CustomEvent('app:notifIncoming',{ detail:{
-        title: d.title || payload?.notification?.title || 'Notificación',
-        body:  d.body  || payload?.notification?.body  || '',
-        date:  d.date  || '',
-        image: d.image || '',
-        link:  d.link  || ''   // ✅ link va dentro de data.link
-      }}));
-    }catch(e){
-      console.error('⛔ onMessage error', e);
-    }
-  });
-
-  // Reaccionar a cambios de modo standalone
-  if(window.matchMedia){
-    const mq = window.matchMedia('(display-mode: standalone)');
-    mq.addEventListener?.('change', ()=>{
-      const st = mq.matches || (window.navigator.standalone === true);
-      nb.style.display = st ? '' : 'none';
+      if (d.type === 'notif:open' && typeof d.url === 'string') {
+        // Intento de marcar leída por coincidencia exacta de title/body (no es perfecto, pero no rompe)
+        try{
+          const u = new URL(d.url, location.origin);
+          const q = new URLSearchParams(u.hash.split('?')[1]||'');
+          const t = decodeURIComponent(q.get('title') || '');
+          const b = decodeURIComponent(q.get('body')  || '');
+          const list = load(); let changed = false;
+          for (const x of list) {
+            if (!x.read && x.title===t && x.body===b) { x.read = true; changed = true; }
+          }
+          if (changed) save(list);
+          updateBadge();
+        }catch(_){}
+      }
     });
   }
+
+  // Primer plano (evento del módulo FCM)
+  window.addEventListener('app:notifIncoming',(e)=>{
+    add(e.detail||{});
+    updateBadge();
+  });
+
+  // Abrir item → hoja (solo si existe UI)
+  if (isStandalone && panel) {
+    panel.addEventListener('click', (e)=>{
+      const b = e.target.closest('button'); if(!b) return;
+      const id = b.getAttribute('data-id');
+      const act = b.getAttribute('data-act');
+
+      if (act === 'open') {
+        const it = load().find(x=>x.id===id);
+        if (it) {
+          const qs = new URLSearchParams();
+          qs.set('title', it.title);
+          qs.set('body',  it.body);
+          if (it.date)  qs.set('date',  it.date);
+          if (it.image) qs.set('image', it.image);
+          if (it.link)  qs.set('link',  it.link);
+          location.hash = '/notif?'+qs.toString();
+
+          // marcar leída
+          const list = load();
+          const i = list.findIndex(x=>x.id===id);
+          if (i>=0) { list[i].read = true; save(list); }
+          updateBadge();
+        }
+        panel.style.display='none';
+      }
+
+      if (act === 'del') {
+        delById(id);
+        render();
+        updateBadge();
+      }
+    });
+  }
+
+  // Arranque
+  updateBadge();
 })();
 /* ───────── Logo giratorio ───────── */
 (function(){
