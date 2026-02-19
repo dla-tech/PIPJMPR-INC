@@ -1618,7 +1618,7 @@ function stepsFor(platform){
   if(!window.__CFG_ALLOWED) return;
 
   // 💬 Aquí escribes tu texto — usa \n para saltos de línea
-  const promoText = `🚨De aparecer en rojo el boton de notificaciones, porfavor PRESIONAR para activarlas.🚨`.trim();
+  const promoText = ``.trim();
 
   // 🖼️ Imagen opcional (déjalo vacío si no quieres fondo)
   const promoImage = "https://raw.githubusercontent.com/dla-tech/Media-privada/main/IMG_8023.jpeg";
