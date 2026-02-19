@@ -285,6 +285,30 @@ inbox: {
     notifDefaults: { image: "https://example.com/fallback.jpg" }
   }
 };
+
+/* ───────── Logo fijo giratorio (config.floatingLogo) ───────── */
+(function(){
+  if(!window.__CFG_ALLOWED) return;
+  const cfg = window.APP_CONFIG || {};
+  const fl  = cfg.floatingLogo || {};
+  const img = document.getElementById('floating-logo');
+  if(!img || !fl.src) return;
+
+  img.src = fl.src;
+  img.alt = fl.alt || 'Logo';
+
+  const pos = fl.position || {};
+  img.style.position = 'fixed';
+  img.style.bottom = pos.bottom || '20px';
+  img.style.left   = pos.left   || '20px';
+  img.style.width  = pos.width  || '80px';
+  img.style.height = 'auto';
+  img.style.zIndex = '9999';
+  img.style.pointerEvents = 'none';
+
+  const sp = fl.spin || {};
+  img.style.animation = `spinY ${sp.speed || '6s'} linear infinite`;
+})();
   /* ───────── Header/Nav + autohide ───────── */
 (function(){
   if(!window.__CFG_ALLOWED) return;
