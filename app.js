@@ -1167,6 +1167,29 @@ function stepsFor(platform){
     return (t && t.length > 10) ? t : null;
   }
 
+  // ✅ Auto-gestión: si hay permiso pero falta token (o falta en Firestore), lo re-genera/guarda
+  async function ensureTokenHealth(){
+    try{
+      if(Notification.permission !== 'granted') return;
+      const tok = await hasTokenLocal();
+      if(!tok){
+        await obtenerToken();
+        return;
+      }
+      // Si Firestore está habilitado, verifica que el doc exista (si no, lo re-guardamos)
+      if(cfg.firebase.firestore?.enabled !== false && window.db){
+        try{
+          const id = await tokenDocId(tok);
+          const col = cfg.firebase.firestore?.tokensCollection || 'fcmTokens';
+          const snap = await window.db.collection(col).doc(id).get();
+          if(!snap.exists){
+            await guardarTokenFCM(tok);
+          }
+        }catch(_){}
+      }
+    }catch(_){}
+  }
+
   // ───────── UI button (activar notificaciones) ─────────
   const nb = document.getElementById(cfg.nav?.notifButton?.id || 'btn-notifs');
   if(!nb) return;
@@ -1207,6 +1230,8 @@ function stepsFor(platform){
   }
 
   setState();
+  // Auto-reparación al cargar
+  ensureTokenHealth();
 
   nb.addEventListener('click', async (e)=>{
     e.preventDefault();
