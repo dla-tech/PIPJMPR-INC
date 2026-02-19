@@ -1122,6 +1122,7 @@ function stepsFor(platform){
   }
 
   let __fcmTokenPromise = null;
+  const TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 días
 
   async function obtenerToken(){
     if(!messaging) return null;
@@ -1144,6 +1145,7 @@ function stepsFor(platform){
         // Guarda local + Firestore (si aplica)
         if (token) {
           try{ localStorage.setItem('fcm_token', token); }catch(_){}
+          try{ localStorage.setItem('fcm_token_ts', String(Date.now())); }catch(_){}
           if(cfg.firebase.firestore?.enabled !== false){
             await guardarTokenFCM(token);
           }
@@ -1176,6 +1178,12 @@ function stepsFor(platform){
         await obtenerToken();
         return;
       }
+      // Si el token es viejo, forzar refresh
+      const ts = parseInt(localStorage.getItem('fcm_token_ts') || '0', 10);
+      if (ts && (Date.now() - ts) > TOKEN_TTL_MS) {
+        await refreshTokenHard();
+        return;
+      }
       // Si Firestore está habilitado, verifica que el doc exista (si no, lo re-guardamos)
       if(cfg.firebase.firestore?.enabled !== false && window.db){
         try{
@@ -1183,11 +1191,47 @@ function stepsFor(platform){
           const col = cfg.firebase.firestore?.tokensCollection || 'fcmTokens';
           const snap = await window.db.collection(col).doc(id).get();
           if(!snap.exists){
+            // si el doc no existe, intentamos re-guardar o refrescar el token
             await guardarTokenFCM(tok);
           }
         }catch(_){}
       }
     }catch(_){}
+  }
+
+  // Refresh fuerte (por si el token quedó inválido)
+  async function refreshTokenHard(){
+    try{
+      if(!messaging) return null;
+      const fcmReg = await waitForFcmSW();
+      if(!fcmReg) return null;
+
+      const opts = {
+        vapidKey: cfg.firebase.vapidPublicKey,
+        serviceWorkerRegistration: fcmReg
+      };
+
+      // Intentar borrar token actual (si existe)
+      try{
+        const current = await messaging.getToken(opts);
+        if (current && typeof messaging.deleteToken === 'function') {
+          await messaging.deleteToken(current);
+        }
+      }catch(_){}
+
+      // Pedir uno nuevo
+      const fresh = await messaging.getToken(opts);
+      if (fresh) {
+        try{ localStorage.setItem('fcm_token', fresh); }catch(_){}
+        try{ localStorage.setItem('fcm_token_ts', String(Date.now())); }catch(_){}
+        if(cfg.firebase.firestore?.enabled !== false){
+          await guardarTokenFCM(fresh);
+        }
+      }
+      return fresh || null;
+    }catch(_){
+      return null;
+    }
   }
 
   // ───────── UI button (activar notificaciones) ─────────
