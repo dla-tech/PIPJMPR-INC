@@ -1509,6 +1509,109 @@ function stepsFor(platform){
   })(window.renderNotifView);
 })(); // ← importante punto y coma 
 
+/* ───────── Vista/overlay de notificación (hash #/notif) ───────── */
+(function(){
+  if(!window.__CFG_ALLOWED) return;
+
+  function esc(s){ return String(s ?? '').replace(/[&<>"]/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;' }[c])); }
+
+  function parseNotifFromHash(){
+    const h = location.hash || '';
+    if (!h.startsWith('#/notif')) return null;
+    const q = h.split('?')[1] || '';
+    const qs = new URLSearchParams(q);
+    return {
+      title: qs.get('title') || 'Notificación',
+      body:  qs.get('body')  || '',
+      date:  qs.get('date')  || '',
+      image: qs.get('image') || '',
+      link:  qs.get('link')  || ''
+    };
+  }
+
+  function ensureOverlay(){
+    let wrap = document.getElementById('notif-view');
+    if (wrap) return wrap;
+
+    wrap = document.createElement('div');
+    wrap.id = 'notif-view';
+    wrap.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.65);display:none;align-items:center;justify-content:center;z-index:100003;padding:18px';
+    wrap.innerHTML = `
+      <div id="notif-card" style="background:#fff;max-width:520px;width:100%;border-radius:14px;box-shadow:0 20px 50px rgba(0,0,0,.25);overflow:hidden">
+        <div style="display:flex;gap:10px;align-items:center;padding:12px 14px;border-bottom:1px solid #eee">
+          <strong id="notif-title" style="font:800 16px system-ui;flex:1">Notificación</strong>
+          <button id="notif-close" style="background:#111;color:#fff;border:0;border-radius:10px;padding:6px 10px">Cerrar</button>
+        </div>
+        <div style="padding:14px 16px">
+          <div id="notif-date" style="color:#6b7280;font:600 12px system-ui;margin-bottom:6px"></div>
+          <div id="notif-body" style="font:400 14px/1.5 system-ui;white-space:pre-wrap"></div>
+          <img id="notif-image" alt="" style="display:none;margin-top:12px;width:100%;border-radius:10px;object-fit:cover;max-height:280px"/>
+          <a id="notif-link" href="#" target="_blank" rel="noopener" style="display:none;margin-top:12px;color:#2563eb;text-decoration:underline;font:600 14px system-ui">Abrir enlace</a>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(wrap);
+
+    wrap.addEventListener('click', (e)=>{
+      if (e.target === wrap) hide();
+    });
+    wrap.querySelector('#notif-close')?.addEventListener('click', hide);
+
+    return wrap;
+  }
+
+  function hide(){
+    const wrap = document.getElementById('notif-view');
+    if (wrap) wrap.style.display = 'none';
+    // limpiar hash sin recargar
+    if (location.hash.startsWith('#/notif')) {
+      history.replaceState(null, '', location.pathname + location.search + '#');
+    }
+  }
+
+  // Render público (para el auto-link hook)
+  window.renderNotifView = function(payload){
+    const wrap = ensureOverlay();
+    const t = esc(payload?.title || 'Notificación');
+    const b = payload?.body  || '';
+    const d = esc(payload?.date || '');
+    const img = payload?.image || '';
+    const link = payload?.link || '';
+
+    wrap.querySelector('#notif-title').textContent = t;
+    wrap.querySelector('#notif-date').textContent = d ? ('📅 ' + d) : '';
+    wrap.querySelector('#notif-body').innerHTML = b ? b : '';
+
+    const imgEl = wrap.querySelector('#notif-image');
+    if (img){
+      imgEl.src = img;
+      imgEl.style.display = '';
+    } else {
+      imgEl.style.display = 'none';
+      imgEl.removeAttribute('src');
+    }
+
+    const linkEl = wrap.querySelector('#notif-link');
+    if (link){
+      linkEl.href = link;
+      linkEl.style.display = '';
+    } else {
+      linkEl.style.display = 'none';
+      linkEl.removeAttribute('href');
+    }
+
+    wrap.style.display = 'flex';
+  };
+
+  function handleHash(){
+    const p = parseNotifFromHash();
+    if (p) window.renderNotifView(p);
+  }
+
+  window.addEventListener('hashchange', handleHash);
+  window.addEventListener('DOMContentLoaded', handleHash);
+})();
+
 /* ───────── Banner flotante de anuncio (versión directa y estable, X centrada) ───────── */
 (function(){
   if(!window.__CFG_ALLOWED) return;
