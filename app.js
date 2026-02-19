@@ -1130,8 +1130,8 @@ function stepsFor(platform){
   // ✅ Solo considera válido si EXISTE en Firestore (si Firestore está habilitado)
   async function hasValidToken(){
     try{
-      // OJO: aquí NO forzamos refresh automático.
-      // Solo validamos el token si ya se obtuvo por acción del usuario.
+      // NO forzamos refresh automático.
+      // Solo validamos el token guardado localmente (cuando el usuario lo activó).
       const cached = localStorage.getItem('fcm_token') || '';
       const t = cached && cached.length > 10 ? cached : null;
       if(!t) return null;
@@ -1190,6 +1190,7 @@ function stepsFor(platform){
   // Estado inicial (sin forzar token)
   setState();
 
+  // ✅ Activación MANUAL (botón)
   nb.addEventListener('click', async (e)=>{
     e.preventDefault();
     if(typeof Notification === 'undefined'){
@@ -1219,7 +1220,7 @@ function stepsFor(platform){
     }
   });
 
-  // Primer plano: manda a bandeja interna
+  // ✅ Primer plano: manda a bandeja interna con los campos esperados
   if(messaging){
     messaging.onMessage((payload)=>{
       try{
