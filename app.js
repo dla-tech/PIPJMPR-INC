@@ -267,7 +267,7 @@ inbox: {
     vapidPublicKey: "BGEv9r_6M-xZbyqhUzYYgMT9N6cMtJvLAmE64_H2WoB_tJA_L0qWlTQC3Lhz5tCnpbEd267QMHYvjASiHCOb7gU",
     serviceWorkers: {
       app: "./service-worker.js",
-      fcm: "./firebase-messaging-sw.js"
+      fcm: "./service-worker.js"
     },
     firestore: { enabled: true, tokensCollection: "fcmTokens" }
   },
