@@ -1241,6 +1241,17 @@ function stepsFor(platform){
       });
     }catch(_){}
   }
+  // Refresh suave periódico (por si onTokenRefresh no dispara)
+  if (messaging) {
+    const REFRESH_MS = 6 * 60 * 60 * 1000; // 6 horas
+    setInterval(async ()=>{
+      try{
+        if (Notification.permission !== 'granted') return;
+        await obtenerToken();
+        await setState();
+      }catch(_){}
+    }, REFRESH_MS);
+  }
 
   // Primer plano: manda a bandeja interna
   if(messaging){
@@ -1304,10 +1315,8 @@ function stepsFor(platform){
       link:  n.link ||'',
       read:  !!n.read
     };
-    // evita duplicados exactos recientes (5 min)
-    const five = Date.now()-5*60*1000;
-    const dup = list.find(x => x.ts>five && x.title===item.title && x.body===item.body);
-    if (!dup) list.unshift(item);
+    // Guardar SIEMPRE, aunque se repita
+    list.unshift(item);
     save(list);
     return item;
   };
