@@ -86,7 +86,25 @@ function buildNotifUrl(title, body, extra){
     image: extra?.image || '',
     link:  extra?.link  || ''
   });
-  return '/#/notif?' + q.toString();
+  // Usa el scope del SW para construir URL absoluta correcta (GitHub Pages subpath)
+  const base = (self.registration && self.registration.scope) ? self.registration.scope : '/';
+  return new URL('#/notif?' + q.toString(), base).toString();
+}
+
+function normalizeUrl(raw){
+  if(!raw) return null;
+  try{
+    const base = (self.registration && self.registration.scope) ? self.registration.scope : '/';
+    const u = new URL(String(raw), base);
+    const basePath = new URL(base).pathname;
+    // Solo aceptamos same-origin dentro del scope para evitar 404 en GitHub Pages
+    if (u.origin === location.origin && u.pathname.startsWith(basePath)) {
+      return u.toString();
+    }
+    return null;
+  }catch(_){
+    return null;
+  }
 }
 
 // Mensajes en background
@@ -108,7 +126,7 @@ messaging.onBackgroundMessage(async (payload) => {
   };
 
   // URL destino
-  const url = d.url || buildNotifUrl(title, body, meta);
+  const url = normalizeUrl(d.url) || buildNotifUrl(title, body, meta);
   const msgId = payload?.messageId || d.id || '';
 
   // ✅ SIEMPRE avisar a la app (si está abierta) para que la campanita la guarde
