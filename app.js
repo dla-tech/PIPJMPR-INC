@@ -997,6 +997,14 @@ function stepsFor(platform){
           cfg.firebase.serviceWorkers?.app || './service-worker.js',
           { scope: './' }
         );
+        // Limpieza: desregistrar SW viejo de FCM si existe
+        try{
+          const regs = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(regs.map(r=>{
+            const url = r.active?.scriptURL || r.waiting?.scriptURL || r.installing?.scriptURL || '';
+            if (url.includes('firebase-messaging-sw')) return r.unregister();
+          }));
+        }catch(_){}
       } catch (e) {
         console.error('Error registrando SW app:', e);
       }
@@ -1041,7 +1049,7 @@ function stepsFor(platform){
       if(window.fcmSW) return window.fcmSW;
 
       // Registrar explícitamente SW de FCM (scope igual que el sitio)
-      const swPath = (cfg.firebase.serviceWorkers?.fcm || './firebase-messaging-sw.js');
+      const swPath = (cfg.firebase.serviceWorkers?.fcm || './service-worker.js');
 
       // Si ya existe un registration para ese scope, úsalo (evita duplicados)
       let reg = await navigator.serviceWorker.getRegistration('./');
