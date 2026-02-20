@@ -55,6 +55,67 @@ self.addEventListener('fetch', (event) => {
 const DEFAULT_ICON  = "icons/icon-192.png";
 const DEFAULT_BADGE = "icons/icon-72.png";
 
+// --- IndexedDB simple (para guardar notifs si no hay clientes) ---
+const DB_NAME = 'pwa-notifs';
+const DB_VER = 1;
+const STORE = 'queue';
+
+function idbOpen(){
+  return new Promise((resolve, reject)=>{
+    const req = indexedDB.open(DB_NAME, DB_VER);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(STORE)) {
+        db.createObjectStore(STORE, { keyPath: 'id' });
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function idbPut(item){
+  try{
+    const db = await idbOpen();
+    await new Promise((resolve, reject)=>{
+      const tx = db.transaction(STORE, 'readwrite');
+      tx.objectStore(STORE).put(item);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+    db.close();
+  }catch(_){}
+}
+
+async function idbGetAll(){
+  try{
+    const db = await idbOpen();
+    const items = await new Promise((resolve, reject)=>{
+      const tx = db.transaction(STORE, 'readonly');
+      const req = tx.objectStore(STORE).getAll();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => reject(req.error);
+    });
+    db.close();
+    return items;
+  }catch(_){
+    return [];
+  }
+}
+
+async function idbClear(){
+  try{
+    const db = await idbOpen();
+    await new Promise((resolve, reject)=>{
+      const tx = db.transaction(STORE, 'readwrite');
+      tx.objectStore(STORE).clear();
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+    db.close();
+  }catch(_){}
+}
+
 // ✅ Enviar mensajes a todas las ventanas abiertas de la app (para la bandeja/campanita)
 async function broadcastToClients(msg){
   try{
@@ -130,18 +191,22 @@ messaging.onBackgroundMessage(async (payload) => {
   const msgId = payload?.messageId || d.id || '';
 
   // ✅ SIEMPRE avisar a la app (si está abierta) para que la campanita la guarde
+  const notifPayload = {
+    id: msgId || ('n-' + Date.now() + '-' + Math.random().toString(36).slice(2,8)),
+    title,
+    body,
+    date:  meta.date,
+    image: meta.image,
+    link:  meta.link,
+    ts: Date.now()
+  };
+
   await broadcastToClients({
     type: 'notif:new',
-    payload: {
-      id: msgId,
-      title,
-      body,
-      date:  meta.date,
-      image: meta.image,
-      link:  meta.link,
-      ts: Date.now()
-    }
+    payload: notifPayload
   });
+  // Guardar en IDB por si no hay clientes (iOS puede no recibir postMessage)
+  await idbPut(notifPayload);
 
   /**
    * Mostrar notificación:
@@ -182,6 +247,20 @@ messaging.onBackgroundMessage(async (payload) => {
   };
 
   return self.registration.showNotification(title, options);
+});
+
+// Pull desde la app para recuperar notifs guardadas en SW
+self.addEventListener('message', (ev)=>{
+  const d = ev.data || {};
+  if (d.type === 'notif:pull') {
+    ev.waitUntil((async ()=>{
+      const items = await idbGetAll();
+      if (items.length && ev.source?.postMessage) {
+        ev.source.postMessage({ type:'notif:batch', payload: items });
+        await idbClear();
+      }
+    })());
+  }
 });
 
 // Click en la notificación
