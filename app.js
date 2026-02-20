@@ -1,5 +1,5 @@
 
-/* app.js */
+/** app.js **/
 
 const $  = (s,r=document)=>r.querySelector(s);
 const el = (t,p={})=>Object.assign(document.createElement(t),p);
