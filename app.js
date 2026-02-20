@@ -1404,6 +1404,9 @@ function stepsFor(platform){
 
   const load = () => { try { return JSON.parse(localStorage.getItem(KEY)||'[]'); } catch { return []; } };
   const save = (list) => { try { localStorage.setItem(KEY, JSON.stringify(list.slice(0, MAX))); } catch {} };
+  const seenMap = window.__notifSeenMap || (window.__notifSeenMap = new Map());
+  const SEEN_TTL = 10 * 1000; // evita duplicados inmediatos (10s)
+
   const add  = (n) => {
     const list = load();
     const item = {
@@ -1416,7 +1419,22 @@ function stepsFor(platform){
       link:  n.link ||'',
       read:  !!n.read
     };
-    // Guardar SIEMPRE, aunque se repita
+    const now = Date.now();
+    // Limpieza simple del mapa
+    for (const [k, t] of seenMap) {
+      if (now - t > SEEN_TTL) seenMap.delete(k);
+    }
+    if (item.id) {
+      if (seenMap.has(item.id)) return item;
+      if (list.find(x => x.id === item.id)) return item;
+      seenMap.set(item.id, now);
+    } else {
+      const fp = [item.title, item.body, item.date, item.link].join('|');
+      if (seenMap.has(fp)) return item;
+      seenMap.set(fp, now);
+    }
+    // Evitar duplicar si ya existe el mismo id (puede venir por SW + batch)
+    // Guardar SIEMPRE, aunque se repita contenido
     list.unshift(item);
     save(list);
     return item;
