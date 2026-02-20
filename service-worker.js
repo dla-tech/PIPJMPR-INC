@@ -123,7 +123,9 @@ async function broadcastToClients(msg){
     for (const c of allClients){
       try { c.postMessage(msg); } catch(_) {}
     }
+    return allClients.length;
   }catch(_){}
+  return 0;
 }
 
 // --- Helpers: parse patterns from body and build overlay URL ---
@@ -201,12 +203,14 @@ messaging.onBackgroundMessage(async (payload) => {
     ts: Date.now()
   };
 
-  await broadcastToClients({
+  const clientCount = await broadcastToClients({
     type: 'notif:new',
     payload: notifPayload
   });
-  // Guardar en IDB por si no hay clientes (iOS puede no recibir postMessage)
-  await idbPut(notifPayload);
+  // Guardar en IDB solo si no hay clientes (evita duplicados)
+  if (!clientCount) {
+    await idbPut(notifPayload);
+  }
 
   /**
    * Mostrar notificación:
