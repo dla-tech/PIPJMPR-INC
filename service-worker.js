@@ -88,7 +88,7 @@ function buildNotifUrl(title, body, extra){
   });
   // Usa el scope del SW para construir URL absoluta correcta (GitHub Pages subpath)
   const base = (self.registration && self.registration.scope) ? self.registration.scope : '/';
-  return new URL('#/notif?' + q.toString(), base).toString();
+  return new URL('index.html#/notif?' + q.toString(), base).toString();
 }
 
 function normalizeUrl(raw){
