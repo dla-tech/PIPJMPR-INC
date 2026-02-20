@@ -14,7 +14,7 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
-const CACHE = 'app-v5'; // <-- cambia el número cada vez que hagas cambios grandes
+const CACHE = 'app-v6'; // <-- cambia el número cada vez que hagas cambios grandes
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
