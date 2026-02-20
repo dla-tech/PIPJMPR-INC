@@ -1,4 +1,4 @@
-/* FCM + Cache SW (unificado) */
+/** FCM + Cache SW (unificado) **/
 importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js');
 
