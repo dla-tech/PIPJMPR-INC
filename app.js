@@ -1501,10 +1501,21 @@ function stepsFor(platform){
 
   // Mensajes del SW → guarda nuevas (SIEMPRE activos)
   if ('serviceWorker' in navigator) {
+    function pullFromSw(){
+      navigator.serviceWorker.ready.then(reg=>{
+        try{ reg.active?.postMessage({ type:'notif:pull' }); }catch(_){}
+      });
+    }
     navigator.serviceWorker.addEventListener('message', (ev)=>{
       const d = ev.data || {};
       if (d.type === 'notif:new' && d.payload) {
         add(d.payload);
+        updateBadge();
+      }
+      if (d.type === 'notif:batch' && Array.isArray(d.payload)) {
+        for (const n of d.payload) {
+          add(n);
+        }
         updateBadge();
       }
       if (d.type === 'notif:open' && typeof d.url === 'string') {
@@ -1522,6 +1533,13 @@ function stepsFor(platform){
         }catch(_){}
       }
     });
+    // Pedir notifs guardadas en SW (por si iOS no entregó postMessage)
+    pullFromSw();
+    // Reintentos suaves cuando la app vuelve al frente
+    document.addEventListener('visibilitychange', ()=>{
+      if (!document.hidden) pullFromSw();
+    });
+    window.addEventListener('focus', pullFromSw);
   }
 
   // Primer plano (evento que manda el módulo FCM UI) — SIEMPRE activo
