@@ -1,5 +1,5 @@
 
-/** app.js **/
+/* app.js */
 
 const $  = (s,r=document)=>r.querySelector(s);
 const el = (t,p={})=>Object.assign(document.createElement(t),p);
@@ -204,6 +204,7 @@ inbox: {
   /* ───────── Calendarios ───────── */
   calendars: {
     google: {
+      apiKey: "AIzaSyAUEMnHkbmD989pm7hntFRW3eBBaJvbc2I",
       calendarId: "72086005a3ac9a324642e6977fb8f296d531c3520b03c6cf342495ed215e0186@group.calendar.google.com",
       embedUrl:
         "https://calendar.google.com/calendar/embed?src=72086005a3ac9a324642e6977fb8f296d531c3520b03c6cf342495ed215e0186%40group.calendar.google.com&ctz=America%2FPuerto_Rico&bgcolor=%23f4f7fb&hl=en",
@@ -497,46 +498,80 @@ inbox: {
   }
 })();
 
-/* ───────── ICS (martes/miércoles) ───────── */
+/* ───────── Google Calendar API (martes/miércoles) ───────── */
 (function(){
   if(!window.__CFG_ALLOWED) return;
   const cfg=window.APP_CONFIG;
-  const ICS_URL = cfg.ics?.url; if(!ICS_URL) return;
+  const CAL_ID = cfg.calendars?.google?.calendarId;
+  const API_KEY = cfg.calendars?.google?.apiKey;
+  if(!CAL_ID || !API_KEY) return;
   const TZ = cfg.ics?.timeZone || 'America/Puerto_Rico';
 
-  const toPR = d => new Date(d.toLocaleString('en-US',{timeZone:TZ}));
+  const toTZ = d => new Date(d.toLocaleString('en-US',{timeZone:TZ}));
   const startOfDay = d => (d=new Date(d), d.setHours(0,0,0,0), d);
   const addDays = (d,n)=> (d=new Date(d), d.setDate(d.getDate()+n), d);
-  const sameDayPR = (a,b)=>{a=toPR(a);b=toPR(b);return a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate()};
-  const unfold = txt => txt.replace(/(?:\r\n|\n)[ \t]/g,'');
+
+  function sameDayTZ(a,b){
+    a=toTZ(a);b=toTZ(b);
+    return a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate();
+  }
+
+  function normalizeLocation(raw){
+    if(!raw) return 'Maunabo, Puerto Rico';
+    let txt=String(raw).split(/[-–—/|]/).pop().trim();
+    txt=txt.replace(/\s*\(.*?\)\s*/g,' ').replace(/\s{2,}/g,' ').trim();
+    const municipios=['Maunabo','Emajagua','Yabucoa','Humacao','Las Piedras','Patillas','Guayama','San Lorenzo'];
+    const has=municipios.some(m=>new RegExp(`\\b${m}\\b`,'i').test(txt));
+    if(has){ if(!/puerto\s*rico/i.test(txt)) txt+=', Puerto Rico'; return txt; }
+    return `${txt}, ${window.APP_CONFIG?.maps?.defaultTownFallback||'Maunabo, Puerto Rico'}`;
+  }
+
+  function setMap(iframeEl, locationText, pinUrl){
+    if(!iframeEl) return;
+    const q=normalizeLocation(locationText);
+    iframeEl.src='https://www.google.com/maps?output=embed&q='+encodeURIComponent(q);
+    iframeEl.title='Mapa: '+q;
+    let overlay = iframeEl.parentElement.querySelector('.map-overlay');
+    if(!overlay){
+      overlay = el('a'); overlay.className='map-overlay'; overlay.target='_blank'; overlay.rel='noopener';
+      overlay.style.cssText='position:absolute;inset:0;z-index:5;';
+      const holder=iframeEl.parentElement; const cs=getComputedStyle(holder);
+      if(cs.position==='static') holder.style.position='relative'; holder.appendChild(overlay);
+    }
+    overlay.href = pinUrl || ('https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(q));
+  }
+
+  function getEventStart(ev){
+    if (ev.start?.dateTime) return new Date(ev.start.dateTime);
+    if (ev.start?.date) return new Date(ev.start.date + 'T00:00:00');
+    return null;
+  }
 
   (async function load(){
     try{
-      const res=await fetch(ICS_URL+'?t='+(Date.now()), {cache:'no-store'}); if(!res.ok) throw new Error('HTTP '+res.status);
-      const txt = unfold(await res.text());
-      const blocks = txt.split(/BEGIN:VEVENT/).slice(1).map(b=>'BEGIN:VEVENT'+b.split('END:VEVENT')[0]);
-
-      const now=new Date(), pr=toPR(now), sunday=startOfDay(addDays(pr,-pr.getDay()));
+      const now=new Date(), pr=toTZ(now), sunday=startOfDay(addDays(pr,-pr.getDay()));
       const tue=addDays(sunday,2), wed=addDays(sunday,3);
 
-      function getLineVal(block, prop){ const m = block.match(new RegExp('^'+prop+'(?:;[^:\\n]*)?:(.*)$','mi')); return m?m[1].trim():null; }
-      function parseDTSTART(block){
-        const m = block.match(/^DTSTART([^:\n]*)?:([^\n]+)$/mi); if(!m) return null;
-        const params=(m[1]||'').toUpperCase(); const val=m[2].trim();
-        const dOnly=val.match(/^(\d{4})(\d{2})(\d{2})$/);
-        if(/VALUE=DATE/.test(params) && dOnly){ const [_,Y,M,D]=dOnly; return new Date(Date.UTC(+Y,+M-1,+D,4,0,0)); }
-        const dt=val.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z)?$/);
-        if(dt){ const [_,Y,M,D,hh,mm,ss,Z]=dt; if(/TZID=AMERICA\/PUERTO_RICO/.test(params)) return new Date(Date.UTC(+Y,+M-1,+D,+hh+4,+mm,+ss)); if(Z) return new Date(Date.UTC(+Y,+M-1,+D,+hh,+mm,+ss)); return new Date(Date.UTC(+Y,+M-1,+D,+hh+4,+mm,+ss)); }
-        if(dOnly){ const [_,Y,M,D]=dOnly; return new Date(Date.UTC(+Y,+M-1,+D,4,0,0)); }
-        return null;
-      }
+      const timeMin = new Date(sunday).toISOString();
+      const timeMax = new Date(addDays(sunday,7)).toISOString();
+      const url = 'https://www.googleapis.com/calendar/v3/calendars/' +
+        encodeURIComponent(CAL_ID) +
+        '/events?singleEvents=true&orderBy=startTime&timeMin=' +
+        encodeURIComponent(timeMin) +
+        '&timeMax=' +
+        encodeURIComponent(timeMax) +
+        '&key=' + encodeURIComponent(API_KEY);
+
+      const res=await fetch(url, {cache:'no-store'}); if(!res.ok) throw new Error('HTTP '+res.status);
+      const data=await res.json();
+      const items = Array.isArray(data.items) ? data.items : [];
 
       let tueEv=null, wedEv=null;
-      for(const ev of blocks){
-        const dt=parseDTSTART(ev); if(!dt) continue;
-        const obj={summary:getLineVal(ev,'SUMMARY'), location:getLineVal(ev,'LOCATION'), url:getLineVal(ev,'URL')};
-        if(!tueEv && sameDayPR(dt,tue)) tueEv=obj;
-        if(!wedEv && sameDayPR(dt,wed)) wedEv=obj;
+      for(const ev of items){
+        const dt=getEventStart(ev); if(!dt) continue;
+        const obj={summary:ev.summary||'', location:ev.location||'', url:ev.htmlLink||''};
+        if(!tueEv && sameDayTZ(dt,tue)) tueEv=obj;
+        if(!wedEv && sameDayTZ(dt,wed)) wedEv=obj;
         if(tueEv && wedEv) break;
       }
 
@@ -566,33 +601,9 @@ inbox: {
 
       const tIframe = $('#ubicacion-cultos .grid.cols-2 > div:nth-child(1) iframe');
       const wIframe = $('#ubicacion-cultos .grid.cols-2 > div:nth-child(2) iframe');
-
-      function normalizeLocation(raw){
-        if(!raw) return 'Maunabo, Puerto Rico';
-        let txt=String(raw).split(/[-–—/|]/).pop().trim();
-        txt=txt.replace(/\s*\(.*?\)\s*/g,' ').replace(/\s{2,}/g,' ').trim();
-        const municipios=['Maunabo','Emajagua','Yabucoa','Humacao','Las Piedras','Patillas','Guayama','San Lorenzo'];
-        const has=municipios.some(m=>new RegExp(`\\b${m}\\b`,'i').test(txt));
-        if(has){ if(!/puerto\s*rico/i.test(txt)) txt+=', Puerto Rico'; return txt; }
-        return `${txt}, ${window.APP_CONFIG?.maps?.defaultTownFallback||'Maunabo, Puerto Rico'}`;
-      }
-      function setMap(iframeEl, locationText, pinUrl){
-        if(!iframeEl) return;
-        const q=normalizeLocation(locationText);
-        iframeEl.src='https://www.google.com/maps?output=embed&q='+encodeURIComponent(q);
-        iframeEl.title='Mapa: '+q;
-        let overlay = iframeEl.parentElement.querySelector('.map-overlay');
-        if(!overlay){
-          overlay = el('a'); overlay.className='map-overlay'; overlay.target='_blank'; overlay.rel='noopener';
-          overlay.style.cssText='position:absolute;inset:0;z-index:5;';
-          const holder=iframeEl.parentElement; const cs=getComputedStyle(holder);
-          if(cs.position==='static') holder.style.position='relative'; holder.appendChild(overlay);
-        }
-        overlay.href = pinUrl || ('https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(q));
-      }
       setMap(tIframe, tueEv?.location, tueEv?.url||null);
       setMap(wIframe, wedEv?.location, wedEv?.url||null);
-    }catch(e){ console.error('No se pudo cargar el ICS:', e); }
+    }catch(e){ console.error('No se pudo cargar Google Calendar API:', e); }
   })();
 })();
 
