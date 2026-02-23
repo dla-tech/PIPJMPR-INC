@@ -794,8 +794,16 @@ inbox: {
     textContent:'✉️ pipjm1@gmail.com'
   });
 
+  // Web pública
+  const web = el('a',{
+    className:'btn btn-d',
+    href:'https://dla-tech.github.io/PIPJM-PUBLIC-WE-/',
+    target:'_blank', rel:'noopener',
+    textContent:'🌐 Web pública PIPJM'
+  });
+
   // Montar estructura
-  box.append(btn, liveWrap, mail);
+  box.append(btn, liveWrap, mail, web);
   card.appendChild(box);
   sec.innerHTML=''; 
   sec.append(h2,card);
