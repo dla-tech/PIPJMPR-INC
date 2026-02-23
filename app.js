@@ -792,7 +792,7 @@ inbox: {
   }
 
   sec.innerHTML = `
-    <h2>🙏 Petición o Necesidad</h2>
+    <h2>🙏 Escríbenos tu necesidad</h2>
     <div class="card" style="background:#fff8e7">
       <div id="need-body"></div>
     </div>
@@ -824,7 +824,7 @@ inbox: {
     etapa = 0;
     body.innerHTML = `
       <div style="text-align:center;">
-        <h3 style="margin:0 0 14px;">🙏 Petición o Necesidad</h3>
+        <h3 style="margin:0 0 14px;">🙏 Escríbenos tu necesidad</h3>
         <p style="font-size:18px;margin:8px 0;">¿Asistes a una congregación?</p>
         <div style="margin:16px 0;display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
           <button id="need-si"  style="padding:12px 24px;font-size:16px;">Sí</button>
@@ -840,7 +840,7 @@ inbox: {
   function renderFormSi(){
     etapa = 2;
     body.innerHTML = `
-      <h3>🙏 Petición o Necesidad</h3>
+      <h3>🙏 Escríbenos tu necesidad</h3>
       <label>Nombre completo <span style="color:#d00">(obligatorio)</span>:</label>
       <input type="text" id="nombre" style="width:100%;margin-bottom:10px;" required>
 
@@ -877,7 +877,7 @@ inbox: {
 
   function renderOpciones(){
     etapa = 1;
-    body.innerHTML = `<h3>🙏 Petición o Necesidad</h3><p>Selecciona tu necesidad:</p>`;
+    body.innerHTML = `<h3>🙏 Escríbenos tu necesidad</h3><p>Selecciona tu necesidad:</p>`;
     const opciones = [
       'Oración por enfermedad',
       'Oración por la familia',
@@ -902,7 +902,7 @@ inbox: {
     etapa = 2;
     const telReq = (razon === 'Oración por salvación' || razon === 'Oración por reconciliación');
     body.innerHTML = `
-      <h3>🙏 Petición o Necesidad</h3>
+      <h3>🙏 Escríbenos tu necesidad</h3>
       ${razon === 'Otros'
         ? `<label>Escribe tu necesidad <span style="color:#d00">(obligatorio)</span>:</label>
            <textarea id="peticion" rows="4" style="width:100%;margin-bottom:10px;"></textarea>`
