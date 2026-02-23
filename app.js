@@ -163,9 +163,9 @@ window.APP_CONFIG = {
   nav: {
     links: [
       { id: "cal",  label: "Calendarios",           href: "#calendarios" },
+      { id: "nec",  label: "Necesidades",           href: "#necesidades" },
       { id: "ctos", label: "Ubicación de los cultos", href: "#ubicacion-cultos" },
       { id: "red",  label: "Redes sociales",        href: "#redes" },
-      { id: "nec",  label: "Necesidades",           href: "#necesidades" },
       { id: "tpl",  label: "Ubicación del templo",  href: "#ubicacion-templo" }
     ],
     notifButton: {
@@ -824,7 +824,7 @@ inbox: {
     etapa = 0;
     body.innerHTML = `
       <div style="text-align:center;">
-        <h3 style="margin:0 0 14px;">Pastora: Nélida Brito Morales · Copastor: Marcos Rivera</h3>
+        <h3 style="margin:0 0 14px;">🙏 Petición o Necesidad</h3>
         <p style="font-size:18px;margin:8px 0;">¿Asistes a una congregación?</p>
         <div style="margin:16px 0;display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
           <button id="need-si"  style="padding:12px 24px;font-size:16px;">Sí</button>
@@ -833,7 +833,6 @@ inbox: {
         <small><strong style="color:#6b7280">“Los campos solicitados nos permiten brindarle un mejor servicio acorde a sus necesidades. Le agradecemos completar todos ellos, si es posible. ¡Gracias!”</strong></small>
       </div>
     `;
-    body.appendChild(renderBack());
     body.querySelector('#need-si').onclick = ()=>{ ultimaEtapa = etapa; renderFormSi(); };
     body.querySelector('#need-no').onclick = ()=>{ ultimaEtapa = etapa; renderOpciones(); };
   }
