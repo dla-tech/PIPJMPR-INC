@@ -5,6 +5,55 @@ const $  = (s,r=document)=>r.querySelector(s);
 const el = (t,p={})=>Object.assign(document.createElement(t),p);
 const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
 
+/* ───────── Loader fire effect ───────── */
+function ensureLoaderFireCss(){
+  if(document.getElementById('loader-fire-style')) return;
+  const s = document.createElement('style');
+  s.id = 'loader-fire-style';
+  s.textContent = `
+    #loader,#loader2{overflow:hidden}
+    #loader .loader-fire,#loader2 .loader-fire{
+      position:absolute;left:0;right:0;bottom:-18%;height:0;opacity:0;pointer-events:none;z-index:3;
+      transition:height var(--loader-fire-ms,900ms) ease,opacity 220ms ease;
+      background:
+        radial-gradient(120% 45% at 50% 100%,rgba(255,70,0,.75),rgba(255,70,0,0) 62%),
+        radial-gradient(100% 35% at 25% 100%,rgba(255,180,0,.78),rgba(255,180,0,0) 58%),
+        radial-gradient(100% 35% at 75% 100%,rgba(255,120,0,.7),rgba(255,120,0,0) 60%);
+      filter:blur(2px) saturate(1.2);
+      transform-origin:bottom center;
+    }
+    #loader.is-burning .loader-fire,#loader2.is-burning .loader-fire{
+      height:130%;
+      opacity:1;
+    }
+    #loader.is-burning img,#loader2.is-burning img,
+    #loader.is-burning video,#loader2.is-burning video{
+      transition:transform var(--loader-fire-ms,900ms) ease,filter var(--loader-fire-ms,900ms) ease,opacity var(--loader-fire-ms,900ms) ease;
+      transform:scale(1.03);
+      filter:brightness(.7) contrast(1.08) saturate(.85);
+      opacity:.08;
+    }
+  `;
+  document.head.appendChild(s);
+}
+
+function armLoaderFire(ld, ms){
+  if(!ld) return;
+  ensureLoaderFireCss();
+  ld.style.setProperty('--loader-fire-ms', `${Math.max(350, +ms || 900)}ms`);
+  if(!ld.querySelector('.loader-fire')){
+    const fire = document.createElement('div');
+    fire.className = 'loader-fire';
+    ld.appendChild(fire);
+  }
+}
+
+function igniteLoaderFire(ld){
+  if(!ld) return;
+  armLoaderFire(ld, parseInt(ld.style.getPropertyValue('--loader-fire-ms')||'900',10));
+  requestAnimationFrame(()=>ld.classList.add('is-burning'));
+}
+
 /* ───────── Guard ───────── */
 (function(){
   const {security}=window.APP_CONFIG||{};
@@ -67,7 +116,9 @@ const cssv=(n,v)=>document.documentElement.style.setProperty(n,v);
 
   function done2(){
     document.documentElement.classList.remove('loading');
-    ld.style.opacity = '0';
+    armLoaderFire(ld, FADE);
+    igniteLoaderFire(ld);
+    setTimeout(()=>{ ld.style.opacity = '0'; }, 70);
     setTimeout(()=>{ try{ ld.remove(); }catch(_){ } }, FADE+100);
     document.getElementById('preload-style-soft')?.remove();
   }
@@ -322,7 +373,9 @@ inbox: {
     if(window.__LOADER_DONE__) return;
     window.__LOADER_DONE__ = true;
     document.documentElement.classList.remove('loading');
-    ld.classList.add('hide');
+    armLoaderFire(ld, FADE);
+    igniteLoaderFire(ld);
+    setTimeout(()=>ld.classList.add('hide'), 70);
     setTimeout(()=>{ try{ ld.remove(); }catch(_){ } }, FADE+100);
     document.getElementById('preload-style')?.remove();
   }
@@ -1268,31 +1321,10 @@ function getIOSMajorVersion(){
 // Pasos de instalación según plataforma y versión
 function stepsFor(platform){
   if (platform === 'ios') {
-    const v = getIOSMajorVersion();
-    if (v === 18) {
-      // iOS 18 → botón Compartir directo
-      return [
-        'Paso 1: Presiona "compartir" <strong>Compartir</strong> (cuadrado con flecha hacia arriba).',
-        'Paso 2: Desliza hacia abajo hasta encontrar "agregar a inicio" .',
-        'Paso 3: Confirma el nombre "PIPJM" <strong>“Agregar a Inicio”</strong>.',
-        'Paso 4: Arriba a la derecha presiona agregar <strong>“Agregar”</strong> (botón azul).'
-      ];
-    }
-    if (v >= 26) {
-      // iOS 26+ → menú de tres puntos primero
-      return [
-        'Paso 1: Toca los tres puntos <strong>tres puntos</strong> (⋮).',
-        'Paso 2: Presiona compartir <strong>Compartir</strong>.',
-        'Paso 3: Desliza hacia abajo y presiona "agregar a inicio" <strong>“Agregar a Inicio”</strong>.',
-        'Paso 4: Arriba a la derecha presiona "agregar" <strong>“Agregar”</strong> (botón azul).'
-      ];
-    }
-    // fallback si no reconoce versión → usar pasos estilo iOS 18
     return [
-      'Paso 1: Toca el botón <strong>Compartir</strong>.',
-      'Paso 2: Desliza hacia abajo.',
-      'Paso 3: Presiona <strong>“Agregar a Inicio”</strong>.',
-      'Paso 4: Presiona <strong>Agregar</strong> arriba a la derecha.'
+      'Paso 1: Abre esta página en <strong>Safari</strong>.',
+      'Paso 2: Toca <strong>Compartir</strong> y luego <strong>Agregar a pantalla de inicio</strong>.',
+      'Paso 3: Presiona <strong>Agregar</strong>.'
     ];
   }
     // Android (fallback)
