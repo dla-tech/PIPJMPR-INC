@@ -792,7 +792,7 @@ inbox: {
   }
 
   sec.innerHTML = `
-    <h2>🙏 Escríbenos tu necesidad</h2>
+    <h2>🙏 Petición o Necesidad</h2>
     <div class="card" style="background:#fff8e7">
       <div id="need-body"></div>
     </div>
