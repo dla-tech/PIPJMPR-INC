@@ -287,6 +287,54 @@ inbox: {
   }
 };
 
+/* ───────── Loader runtime (respeta config.loader) ───────── */
+(function(){
+  if(!window.__CFG_ALLOWED) return;
+  const cfg = window.APP_CONFIG || {};
+  const L = cfg.loader || {};
+  if(L.enabled === false) return;
+
+  const ld = document.getElementById('loader');
+  if(!ld) return;
+
+  // Inserta imagen/video si no existe contenido
+  if(!ld.querySelector('img') && !ld.querySelector('video')){
+    if(L.image || cfg.assets?.loaderImage){
+      const img = document.createElement('img');
+      img.src = L.image || cfg.assets?.loaderImage || '';
+      img.alt = 'Cargando';
+      img.style.objectFit = L.objectFit || 'cover';
+      img.style.objectPosition = L.objectPosition || '50% 45%';
+      ld.appendChild(img);
+    }
+  }
+
+  const MIN  = +L.minVisibleMs || 4500;
+  const FADE = +L.fadeMs || 600;
+  const HARD = (+L.hardFallbackMs || MIN + FADE + 2000);
+  const start = performance.now();
+
+  ld.style.opacity = '1';
+  ld.style.transition = `opacity ${FADE}ms ease`;
+  document.documentElement.classList.add('loading');
+
+  function done(){
+    if(window.__LOADER_DONE__) return;
+    window.__LOADER_DONE__ = true;
+    document.documentElement.classList.remove('loading');
+    ld.classList.add('hide');
+    setTimeout(()=>{ try{ ld.remove(); }catch(_){ } }, FADE+100);
+    document.getElementById('preload-style')?.remove();
+  }
+
+  window.addEventListener('load', ()=>{
+    const wait = Math.max(0, MIN - (performance.now()-start));
+    setTimeout(done, wait);
+  }, {once:true});
+
+  setTimeout(done, HARD);
+})();
+
 /* ───────── Logo fijo giratorio (config.floatingLogo) ───────── */
 (function(){
   if(!window.__CFG_ALLOWED) return;
@@ -621,8 +669,8 @@ inbox: {
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
             <p style="margin:0;flex:1">Algunos servicios se realizan en ubicaciones distintas:</p>
             <div style="display:flex;gap:8px">
-              <button id="culto-prev" class="btn btn-d" style="padding:9px 16px;background:#fde047;border:2px solid #f59e0b;color:#dc2626;font-weight:800;border-radius:10px">Anterior</button>
-              <button id="culto-next" class="btn btn-d" style="padding:9px 16px;background:#fde047;border:2px solid #f59e0b;color:#dc2626;font-weight:800;border-radius:10px">Siguiente</button>
+              <button id="culto-prev" class="btn btn-d" style="padding:9px 16px;background:#fde047;border:2px solid #f59e0b;color:#dc2626;font-weight:800;border-radius:10px;touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-select:none">Anterior</button>
+              <button id="culto-next" class="btn btn-d" style="padding:9px 16px;background:#fde047;border:2px solid #f59e0b;color:#dc2626;font-weight:800;border-radius:10px;touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-select:none">Siguiente</button>
             </div>
           </div>
           <div class="grid cols-2">
