@@ -498,7 +498,7 @@ inbox: {
   }
 })();
 
-/* ───────── Google Calendar API (martes/miércoles) ───────── */
+/* ───────── Google Calendar API (cultos: rotación + navegación) ───────── */
 (function(){
   if(!window.__CFG_ALLOWED) return;
   const cfg=window.APP_CONFIG;
@@ -508,13 +508,7 @@ inbox: {
   const TZ = cfg.ics?.timeZone || 'America/Puerto_Rico';
 
   const toTZ = d => new Date(d.toLocaleString('en-US',{timeZone:TZ}));
-  const startOfDay = d => (d=new Date(d), d.setHours(0,0,0,0), d);
   const addDays = (d,n)=> (d=new Date(d), d.setDate(d.getDate()+n), d);
-
-  function sameDayTZ(a,b){
-    a=toTZ(a);b=toTZ(b);
-    return a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate();
-  }
 
   function normalizeLocation(raw){
     if(!raw) return 'Maunabo, Puerto Rico';
@@ -546,14 +540,30 @@ inbox: {
     if (ev.start?.date) return new Date(ev.start.date + 'T00:00:00');
     return null;
   }
+  function getEventEnd(ev){
+    if (ev.end?.dateTime) return new Date(ev.end.dateTime);
+    if (ev.end?.date) return new Date(ev.end.date + 'T23:59:59');
+    return null;
+  }
+  function isUrl(s){
+    return /^https?:\/\//i.test(String(s||'').trim());
+  }
+  function formatDayLabel(d){
+    return d.toLocaleDateString('es-PR',{weekday:'long', day:'numeric', month:'long', timeZone:TZ});
+  }
+  function extractPredicador(desc){
+    if(!desc) return '';
+    const txt = String(desc).trim();
+    if(!txt) return '';
+    const first = txt.split(/\r?\n/)[0].trim();
+    return first;
+  }
 
   (async function load(){
     try{
-      const now=new Date(), pr=toTZ(now), sunday=startOfDay(addDays(pr,-pr.getDay()));
-      const tue=addDays(sunday,2), wed=addDays(sunday,3);
-
-      const timeMin = new Date(sunday).toISOString();
-      const timeMax = new Date(addDays(sunday,7)).toISOString();
+      const now=new Date();
+      const timeMin = new Date(addDays(now, -30)).toISOString();
+      const timeMax = new Date(addDays(now, 60)).toISOString();
       const url = 'https://www.googleapis.com/calendar/v3/calendars/' +
         encodeURIComponent(CAL_ID) +
         '/events?singleEvents=true&orderBy=startTime&timeMin=' +
@@ -566,43 +576,122 @@ inbox: {
       const data=await res.json();
       const items = Array.isArray(data.items) ? data.items : [];
 
-      let tueEv=null, wedEv=null;
-      for(const ev of items){
-        const dt=getEventStart(ev); if(!dt) continue;
-        const obj={summary:ev.summary||'', location:ev.location||'', url:ev.htmlLink||''};
-        if(!tueEv && sameDayTZ(dt,tue)) tueEv=obj;
-        if(!wedEv && sameDayTZ(dt,wed)) wedEv=obj;
-        if(tueEv && wedEv) break;
-      }
+      const events = items
+        .filter(ev=>!ev.status || ev.status!=='cancelled')
+        .map(ev=>{
+          const start = getEventStart(ev);
+          const end   = getEventEnd(ev);
+          if(!start) return null;
+          return {
+            start,
+            end,
+            summary: ev.summary || 'Culto',
+            location: ev.location || '',
+            desc: ev.description || '',
+            url: ev.htmlLink || ''
+          };
+        })
+        .filter(Boolean)
+        .sort((a,b)=>a.start-b.start);
+
+      if(!events.length) return;
 
       const cultos = $('#ubicacion-cultos'); if(!cultos) return;
       cultos.innerHTML = `
         <h2>Ubicación de cultos evangelísticos</h2>
         <div class="card">
-          <p>Algunos servicios se realizan en ubicaciones distintas:</p>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+            <p style="margin:0;flex:1">Algunos servicios se realizan en ubicaciones distintas:</p>
+            <div style="display:flex;gap:8px">
+              <button id="culto-prev" class="btn btn-d" style="padding:6px 10px">Anterior</button>
+              <button id="culto-next" class="btn btn-d" style="padding:6px 10px">Siguiente</button>
+            </div>
+          </div>
           <div class="grid cols-2">
             <div>
-              <p class="subhead"><span id="lbl-martes">${(cfg.ics?.labels?.martesPrefix||'Martes')} ${tue.getDate()}</span></p>
-              <p><strong id="title-martes">Culto evangelístico</strong><br><span id="addr-martes">(dirección)</span></p>
+              <p class="subhead"><span id="lbl-ev-1">Día</span></p>
+              <p><strong id="title-ev-1">Culto</strong><br><span id="addr-ev-1">(predicador)</span></p>
               <iframe height="260" loading="lazy" title="Culto martes"></iframe>
             </div>
             <div>
-              <p class="subhead"><span id="lbl-miercoles">${(cfg.ics?.labels?.miercolesPrefix||'Miércoles')} ${wed.getDate()}</span></p>
-              <p><strong id="title-miercoles">Culto evangelístico</strong><br><span id="addr-miercoles">(dirección)</span></p>
+              <p class="subhead"><span id="lbl-ev-2">Día</span></p>
+              <p><strong id="title-ev-2">Culto</strong><br><span id="addr-ev-2">(predicador)</span></p>
               <iframe height="260" loading="lazy" title="Culto miércoles"></iframe>
             </div>
           </div>
         </div>`;
 
-      if($('#title-martes') && tueEv?.summary) $('#title-martes').textContent=tueEv.summary;
-      if($('#title-miercoles') && wedEv?.summary) $('#title-miercoles').textContent=wedEv.summary;
-      if($('#addr-martes') && tueEv?.location) $('#addr-martes').textContent=tueEv.location;
-      if($('#addr-miercoles') && wedEv?.location) $('#addr-miercoles').textContent=wedEv.location;
-
       const tIframe = $('#ubicacion-cultos .grid.cols-2 > div:nth-child(1) iframe');
       const wIframe = $('#ubicacion-cultos .grid.cols-2 > div:nth-child(2) iframe');
-      setMap(tIframe, tueEv?.location, tueEv?.url||null);
-      setMap(wIframe, wedEv?.location, wedEv?.url||null);
+
+      let manualOffset = 0;
+      let lastUserAction = 0;
+      const IDLE_MS = 60 * 1000;
+
+      function indexByNow(){
+        const now = new Date();
+        const active = events.findIndex(ev => ev.start <= now && ev.end && now <= ev.end);
+        if(active >= 0) return active;
+        const next = events.findIndex(ev => ev.start > now);
+        if(next >= 0) return next;
+        return Math.max(0, events.length - 1);
+      }
+
+      function getIndex(){
+        const base = indexByNow();
+        let idx = base + manualOffset;
+        if(idx < 0) idx = 0;
+        if(idx >= events.length) idx = events.length - 1;
+        return idx;
+      }
+
+      function renderAt(index){
+        const ev1 = events[index];
+        const ev2 = events[index+1] || null;
+
+        if(ev1){
+          $('#lbl-ev-1').textContent = formatDayLabel(ev1.start);
+          $('#title-ev-1').textContent = ev1.summary;
+          const pred1 = extractPredicador(ev1.desc);
+          $('#addr-ev-1').textContent = pred1 || '(predicador)';
+          const pin1 = isUrl(ev1.location) ? ev1.location : null;
+          setMap(tIframe, ev1.location, pin1);
+        }
+        if(ev2){
+          $('#lbl-ev-2').textContent = formatDayLabel(ev2.start);
+          $('#title-ev-2').textContent = ev2.summary;
+          const pred2 = extractPredicador(ev2.desc);
+          $('#addr-ev-2').textContent = pred2 || '(predicador)';
+          const pin2 = isUrl(ev2.location) ? ev2.location : null;
+          setMap(wIframe, ev2.location, pin2);
+        } else {
+          $('#lbl-ev-2').textContent = '';
+          $('#title-ev-2').textContent = 'Sin próximo culto';
+          $('#addr-ev-2').textContent = '';
+          if(wIframe) wIframe.removeAttribute('src');
+        }
+      }
+
+      function renderAuto(){
+        if(Date.now() - lastUserAction > IDLE_MS){
+          manualOffset = 0;
+        }
+        renderAt(getIndex());
+      }
+
+      $('#culto-prev')?.addEventListener('click', ()=>{
+        manualOffset -= 1;
+        lastUserAction = Date.now();
+        renderAt(getIndex());
+      });
+      $('#culto-next')?.addEventListener('click', ()=>{
+        manualOffset += 1;
+        lastUserAction = Date.now();
+        renderAt(getIndex());
+      });
+
+      renderAuto();
+      setInterval(renderAuto, 60 * 1000);
     }catch(e){ console.error('No se pudo cargar Google Calendar API:', e); }
   })();
 })();
