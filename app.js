@@ -1271,6 +1271,9 @@ inbox: {
     function makeDraggable(el, handle){
       let sx=0, sy=0, ox=0, oy=0, dragging=false;
       const onDown = (ev)=>{
+        const target = ev.target;
+        // No iniciar drag si se tocó un control interactivo (ej. cerrar/minimizar)
+        if (target && target.closest && target.closest('button,a,input,textarea,select,label')) return;
         dragging=true;
         const r = w.getBoundingClientRect();
         ox = r.right; oy = r.bottom; // anclaje conservador
