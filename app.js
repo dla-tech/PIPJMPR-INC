@@ -165,8 +165,8 @@ window.APP_CONFIG = {
       { id: "cal",  label: "Calendarios",           href: "#calendarios" },
       { id: "ctos", label: "Ubicación de los cultos", href: "#ubicacion-cultos" },
       { id: "red",  label: "Redes sociales",        href: "#redes" },
-      { id: "tpl",  label: "Ubicación del templo",  href: "#ubicacion-templo" },
-      { id: "prop", label: "Propósito",             href: "#proposito" }
+      { id: "nec",  label: "Necesidades",           href: "#necesidades" },
+      { id: "tpl",  label: "Ubicación del templo",  href: "#ubicacion-templo" }
     ],
     notifButton: {
       id: "btn-notifs",
@@ -758,6 +758,243 @@ inbox: {
       setInterval(renderAuto, 60 * 1000);
     }catch(e){ console.error('No se pudo cargar Google Calendar API:', e); }
   })();
+})();
+
+/* ───────── Necesidades (formulario EmailJS) ───────── */
+(function(){
+  if(!window.__CFG_ALLOWED) return;
+
+  // Inserta sección entre cultos y redes
+  let sec = document.getElementById('necesidades');
+  if(!sec){
+    sec = document.createElement('section');
+    sec.id = 'necesidades';
+  }
+  const cultos = document.getElementById('ubicacion-cultos');
+  const redes  = document.getElementById('redes');
+  if(!sec.parentElement){
+    if (cultos && cultos.parentElement){
+      cultos.parentElement.insertBefore(sec, redes || cultos.nextSibling);
+    } else if (redes && redes.parentElement){
+      redes.parentElement.insertBefore(sec, redes);
+    } else {
+      document.getElementById('app')?.appendChild(sec);
+    }
+  }
+
+  // Carga EmailJS (una vez)
+  if(!window.__EMAILJS_LOADED__){
+    window.__EMAILJS_LOADED__ = true;
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js';
+    s.onload = ()=>{ try{ emailjs.init('AzWZTx6GexhwPU2UJ'); }catch(_){ } };
+    document.head.appendChild(s);
+  }
+
+  sec.innerHTML = `
+    <h2>🙏 Petición o Necesidad</h2>
+    <div class="card" style="background:#fff8e7">
+      <div id="need-body"></div>
+    </div>
+  `;
+
+  const body = sec.querySelector('#need-body');
+  let etapa = 0;
+  let ultimaEtapa = 0;
+
+  function renderBack(){
+    const wrap = document.createElement('div');
+    wrap.style.marginTop = '12px';
+    const b = document.createElement('button');
+    b.textContent = '⬅️ Volver';
+    b.style.cssText = 'padding:10px 14px;font-size:14px;background:#333;color:#fff;border:0;border-radius:8px;';
+    b.onclick = () => {
+      if (etapa === 2) {
+        if (ultimaEtapa === 1) renderOpciones();
+        else mostrarPreguntaInicial();
+      } else if (etapa === 1) {
+        mostrarPreguntaInicial();
+      }
+    };
+    wrap.appendChild(b);
+    return wrap;
+  }
+
+  function mostrarPreguntaInicial(){
+    etapa = 0;
+    body.innerHTML = `
+      <div style="text-align:center;">
+        <h3 style="margin:0 0 14px;">Pastora: Nélida Brito Morales · Copastor: Marcos Rivera</h3>
+        <p style="font-size:18px;margin:8px 0;">¿Asistes a una congregación?</p>
+        <div style="margin:16px 0;display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+          <button id="need-si"  style="padding:12px 24px;font-size:16px;">Sí</button>
+          <button id="need-no"  style="padding:12px 24px;font-size:16px;">No</button>
+        </div>
+        <small><strong style="color:#6b7280">“Los campos solicitados nos permiten brindarle un mejor servicio acorde a sus necesidades. Le agradecemos completar todos ellos, si es posible. ¡Gracias!”</strong></small>
+      </div>
+    `;
+    body.appendChild(renderBack());
+    body.querySelector('#need-si').onclick = ()=>{ ultimaEtapa = etapa; renderFormSi(); };
+    body.querySelector('#need-no').onclick = ()=>{ ultimaEtapa = etapa; renderOpciones(); };
+  }
+
+  function renderFormSi(){
+    etapa = 2;
+    body.innerHTML = `
+      <h3>🙏 Petición o Necesidad</h3>
+      <label>Nombre completo <span style="color:#d00">(obligatorio)</span>:</label>
+      <input type="text" id="nombre" style="width:100%;margin-bottom:10px;" required>
+
+      <label>Nombre de tu congregación <span style="color:#007a00">(opcional)</span>:</label>
+      <input type="text" id="congregacion" style="width:100%;margin-bottom:10px;">
+
+      <label>Escribe tu petición o necesidad <span style="color:#d00">(obligatorio)</span>:</label>
+      <textarea id="peticion" rows="5" style="width:100%;margin-bottom:10px;"></textarea>
+
+      <label>Número telefónico <span style="color:#007a00">(opcional)</span>:</label>
+      <input type="text" id="telefono" style="width:100%;margin-bottom:10px;">
+
+      <button id="enviarBtn" disabled style="background:#d1d5db;color:white;padding:10px 20px;border:none;border-radius:8px;">Enviar</button>
+    `;
+    body.appendChild(renderBack());
+
+    const nombreInput = body.querySelector('#nombre');
+    const peticionInput = body.querySelector('#peticion');
+    const enviarBtn = body.querySelector('#enviarBtn');
+
+    function validar(){
+      if (nombreInput.value.trim() !== '' && peticionInput.value.trim() !== '') {
+        enviarBtn.disabled = false;
+        enviarBtn.style.backgroundColor = '#0b74de';
+      } else {
+        enviarBtn.disabled = true;
+        enviarBtn.style.backgroundColor = '#d1d5db';
+      }
+    }
+    nombreInput.addEventListener('input', validar);
+    peticionInput.addEventListener('input', validar);
+    enviarBtn.addEventListener('click', ()=> enviarPeticion());
+  }
+
+  function renderOpciones(){
+    etapa = 1;
+    body.innerHTML = `<h3>🙏 Petición o Necesidad</h3><p>Selecciona tu necesidad:</p>`;
+    const opciones = [
+      'Oración por enfermedad',
+      'Oración por la familia',
+      'Oración por matrimonio',
+      'Oración por hijos',
+      'Oración por salvación',
+      'Oración por liberación',
+      'Oración por reconciliación',
+      'Otros'
+    ];
+    opciones.forEach(op=>{
+      const b = document.createElement('button');
+      b.textContent = op;
+      b.style.cssText = 'display:block;width:100%;padding:14px;margin:8px 0;font-size:16px;';
+      b.onclick = ()=>{ ultimaEtapa = etapa; renderFormularioPredeterminado(op); };
+      body.appendChild(b);
+    });
+    body.appendChild(renderBack());
+  }
+
+  function renderFormularioPredeterminado(razon){
+    etapa = 2;
+    const telReq = (razon === 'Oración por salvación' || razon === 'Oración por reconciliación');
+    body.innerHTML = `
+      <h3>🙏 Petición o Necesidad</h3>
+      ${razon === 'Otros'
+        ? `<label>Escribe tu necesidad <span style="color:#d00">(obligatorio)</span>:</label>
+           <textarea id="peticion" rows="4" style="width:100%;margin-bottom:10px;"></textarea>`
+        : `<div style="margin-bottom:10px;font-weight:600;color:#111;">${razon}</div>`
+      }
+
+      <label>Nombre completo <span style="color:#d00">(obligatorio)</span>:</label>
+      <input type="text" id="nombre" style="width:100%;margin-bottom:10px;" required>
+
+      <label>Número telefónico ${telReq ? '<span style="color:#d00">(obligatorio)</span>' : '<span style="color:#007a00">(opcional)</span>'}:</label>
+      <input type="text" id="telefono" ${telReq ? 'required' : ''} style="width:100%;margin-bottom:10px;">
+
+      <label>Detalles (situación o enfermedad específica) <span style="color:#007a00">(opcional)</span>:</label>
+      <textarea id="detalles" rows="4" placeholder="Escriba aquí su situación o enfermedad..." style="width:100%;margin-bottom:10px;"></textarea>
+
+      <button id="enviarBtn" disabled style="background:#d1d5db;color:white;padding:10px 20px;border:none;border-radius:8px;">Enviar</button>
+    `;
+    body.appendChild(renderBack());
+
+    const nombreInput = body.querySelector('#nombre');
+    const peticionInput = body.querySelector('#peticion');
+    const enviarBtn = body.querySelector('#enviarBtn');
+
+    function validar(){
+      if (razon === 'Otros') {
+        if (nombreInput.value.trim() !== '' && (peticionInput?.value.trim() || '') !== '') {
+          enviarBtn.disabled = false;
+          enviarBtn.style.backgroundColor = '#0b74de';
+        } else {
+          enviarBtn.disabled = true;
+          enviarBtn.style.backgroundColor = '#d1d5db';
+        }
+      } else {
+        if (nombreInput.value.trim() !== '') {
+          enviarBtn.disabled = false;
+          enviarBtn.style.backgroundColor = '#0b74de';
+        } else {
+          enviarBtn.disabled = true;
+          enviarBtn.style.backgroundColor = '#d1d5db';
+        }
+      }
+    }
+    nombreInput.addEventListener('input', validar);
+    peticionInput?.addEventListener('input', validar);
+    enviarBtn.addEventListener('click', ()=> enviarPeticion(razon));
+  }
+
+  function enviarPeticion(razon){
+    const nombre = body.querySelector('#nombre')?.value.trim();
+    const peticion = body.querySelector('#peticion')?.value.trim() || '';
+    const detalles = body.querySelector('#detalles')?.value.trim() || '';
+    const telefono = body.querySelector('#telefono')?.value.trim() || '';
+    const congregacion = body.querySelector('#congregacion')?.value.trim() || '';
+
+    const mensajeBase = peticion || razon || '';
+    const mensaje = detalles ? `${mensajeBase}\nDetalles: ${detalles}` : mensajeBase;
+
+    if (!nombre || !mensajeBase) {
+      alert('Por favor completa los campos requeridos.');
+      return;
+    }
+
+    if (mensaje.toLowerCase().includes('suicidio') && telefono === '') {
+      alert('Por razones de seguridad, por favor incluye un número telefónico.');
+      return;
+    }
+
+    const btn = body.querySelector('#enviarBtn');
+    btn.disabled = true;
+    btn.textContent = 'Enviando...';
+
+    emailjs.send('service_wjbpiik', 'template_89ugs9a', {
+      nombre,
+      telefono,
+      razon: razon || 'Petición directa',
+      mensaje,
+      congregacion
+    }).then(()=>{
+      alert('✅ ¡Petición enviada con éxito!');
+      mostrarPreguntaInicial();
+    }).catch((err)=>{
+      console.error('Error al enviar:', err);
+      alert('❌ Error al enviar. Intenta más tarde.');
+    }).finally(()=>{
+      btn.disabled = false;
+      btn.textContent = 'Enviar';
+      btn.style.backgroundColor = '#0b74de';
+    });
+  }
+
+  mostrarPreguntaInicial();
 })();
 
 /* ───────── YouTube live ───────── */
