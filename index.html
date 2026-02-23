@@ -19,10 +19,11 @@
   <style id="preload-style">body > *:not(#loader){visibility:hidden}</style>
   <script>document.documentElement.classList.add('loading')</script>
 
-  <!-- Failsafe: quita loader aunque app.js no cargue -->
+  <!-- Failsafe: quita loader si la app no lo cierra -->
   <script>
     (function(){
       function kill(){
+        if (window.__LOADER_DONE__) return;
         document.documentElement.classList.remove('loading');
         document.getElementById('preload-style')?.remove();
         const ld=document.getElementById('loader');
@@ -31,8 +32,8 @@
           setTimeout(()=>{ try{ ld.remove(); }catch(e){} },800);
         }
       }
-      window.addEventListener('DOMContentLoaded', kill, {once:true});
-      setTimeout(kill, 2500); // backup
+      window.addEventListener('load', kill, {once:true});
+      setTimeout(kill, 15000); // backup
     })();
   </script>
 </head>
