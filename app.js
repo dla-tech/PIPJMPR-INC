@@ -509,6 +509,13 @@ inbox: {
 
   const toTZ = d => new Date(d.toLocaleString('en-US',{timeZone:TZ}));
   const addDays = (d,n)=> (d=new Date(d), d.setDate(d.getDate()+n), d);
+  const dayKey = d => {
+    const z = toTZ(d);
+    const y = z.getFullYear();
+    const m = String(z.getMonth()+1).padStart(2,'0');
+    const da = String(z.getDate()).padStart(2,'0');
+    return `${y}-${m}-${da}`;
+  };
 
   function normalizeLocation(raw){
     if(!raw) return 'Maunabo, Puerto Rico';
@@ -551,6 +558,15 @@ inbox: {
   function formatDayLabel(d){
     return d.toLocaleDateString('es-PR',{weekday:'long', day:'numeric', month:'long', timeZone:TZ});
   }
+  function formatTimeRange(ev){
+    if(ev.allDay) return 'Todo el día';
+    const s = ev.start;
+    const e = ev.end || null;
+    const t1 = s.toLocaleTimeString('es-PR',{hour:'numeric', minute:'2-digit', timeZone:TZ});
+    if(!e) return t1;
+    const t2 = e.toLocaleTimeString('es-PR',{hour:'numeric', minute:'2-digit', timeZone:TZ});
+    return `${t1}–${t2}`;
+  }
   function extractPredicador(desc){
     if(!desc) return '';
     const txt = String(desc).trim();
@@ -585,10 +601,12 @@ inbox: {
           return {
             start,
             end,
+            allDay: !!ev.start?.date && !ev.start?.dateTime,
             summary: ev.summary || 'Culto',
             location: ev.location || '',
             desc: ev.description || '',
-            url: ev.htmlLink || ''
+            url: ev.htmlLink || '',
+            key: dayKey(start)
           };
         })
         .filter(Boolean)
@@ -603,8 +621,8 @@ inbox: {
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
             <p style="margin:0;flex:1">Algunos servicios se realizan en ubicaciones distintas:</p>
             <div style="display:flex;gap:8px">
-              <button id="culto-prev" class="btn btn-d" style="padding:6px 10px">Anterior</button>
-              <button id="culto-next" class="btn btn-d" style="padding:6px 10px">Siguiente</button>
+              <button id="culto-prev" class="btn btn-d" style="padding:9px 16px;background:#fde047;border:2px solid #f59e0b;color:#dc2626;font-weight:800;border-radius:10px">Anterior</button>
+              <button id="culto-next" class="btn btn-d" style="padding:9px 16px;background:#fde047;border:2px solid #f59e0b;color:#dc2626;font-weight:800;border-radius:10px">Siguiente</button>
             </div>
           </div>
           <div class="grid cols-2">
@@ -628,13 +646,27 @@ inbox: {
       let lastUserAction = 0;
       const IDLE_MS = 60 * 1000;
 
+      function selectForDay(key, now){
+        const list = events.filter(e=>e.key===key);
+        if(!list.length) return null;
+        if(!now) return list[0];
+        const active = list.find(e=>e.start <= now && e.end && now <= e.end);
+        if(active) return active;
+        const next = list.find(e=>e.start > now);
+        return next || list[0];
+      }
+
       function indexByNow(){
         const now = new Date();
-        const active = events.findIndex(ev => ev.start <= now && ev.end && now <= ev.end);
-        if(active >= 0) return active;
-        const next = events.findIndex(ev => ev.start > now);
+        const todayKey = dayKey(now);
+        const ev = selectForDay(todayKey, now);
+        if(ev){
+          const idx = events.findIndex(x=>x===ev);
+          if(idx >= 0) return idx;
+        }
+        const next = events.findIndex(e=>e.start > now);
         if(next >= 0) return next;
-        return Math.max(0, events.length - 1);
+        return 0;
       }
 
       function getIndex(){
@@ -650,7 +682,7 @@ inbox: {
         const ev2 = events[index+1] || null;
 
         if(ev1){
-          $('#lbl-ev-1').textContent = formatDayLabel(ev1.start);
+          $('#lbl-ev-1').innerHTML = `${formatDayLabel(ev1.start)} — <strong style="color:#0b1421">${formatTimeRange(ev1)}</strong>`;
           $('#title-ev-1').textContent = ev1.summary;
           const pred1 = extractPredicador(ev1.desc);
           $('#addr-ev-1').textContent = pred1 || '(predicador)';
@@ -658,7 +690,7 @@ inbox: {
           setMap(tIframe, ev1.location, pin1);
         }
         if(ev2){
-          $('#lbl-ev-2').textContent = formatDayLabel(ev2.start);
+          $('#lbl-ev-2').innerHTML = `${formatDayLabel(ev2.start)} — <strong style="color:#0b1421">${formatTimeRange(ev2)}</strong>`;
           $('#title-ev-2').textContent = ev2.summary;
           const pred2 = extractPredicador(ev2.desc);
           $('#addr-ev-2').textContent = pred2 || '(predicador)';
@@ -672,9 +704,49 @@ inbox: {
         }
       }
 
+      function renderDayBased(){
+        const now = new Date();
+        const todayKey = dayKey(now);
+        const tomorrow = addDays(toTZ(now), 1);
+        const tomorrowKey = dayKey(tomorrow);
+
+        const ev1 = selectForDay(todayKey, now);
+        const ev2 = selectForDay(tomorrowKey, null);
+
+        if(ev1){
+          $('#lbl-ev-1').innerHTML = `${formatDayLabel(ev1.start)} — <strong style="color:#0b1421">${formatTimeRange(ev1)}</strong>`;
+          $('#title-ev-1').textContent = ev1.summary;
+          const pred1 = extractPredicador(ev1.desc);
+          $('#addr-ev-1').textContent = pred1 || '(predicador)';
+          const pin1 = isUrl(ev1.location) ? ev1.location : null;
+          setMap(tIframe, ev1.location, pin1);
+        } else {
+          $('#lbl-ev-1').textContent = formatDayLabel(toTZ(now));
+          $('#title-ev-1').textContent = 'Sin culto hoy';
+          $('#addr-ev-1').textContent = '';
+          if(tIframe) tIframe.removeAttribute('src');
+        }
+
+        if(ev2){
+          $('#lbl-ev-2').innerHTML = `${formatDayLabel(ev2.start)} — <strong style="color:#0b1421">${formatTimeRange(ev2)}</strong>`;
+          $('#title-ev-2').textContent = ev2.summary;
+          const pred2 = extractPredicador(ev2.desc);
+          $('#addr-ev-2').textContent = pred2 || '(predicador)';
+          const pin2 = isUrl(ev2.location) ? ev2.location : null;
+          setMap(wIframe, ev2.location, pin2);
+        } else {
+          $('#lbl-ev-2').textContent = formatDayLabel(tomorrow);
+          $('#title-ev-2').textContent = 'Sin culto mañana';
+          $('#addr-ev-2').textContent = '';
+          if(wIframe) wIframe.removeAttribute('src');
+        }
+      }
+
       function renderAuto(){
         if(Date.now() - lastUserAction > IDLE_MS){
           manualOffset = 0;
+          renderDayBased();
+          return;
         }
         renderAt(getIndex());
       }
