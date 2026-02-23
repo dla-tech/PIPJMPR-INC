@@ -163,9 +163,9 @@ window.APP_CONFIG = {
   nav: {
     links: [
       { id: "cal",  label: "Calendarios",           href: "#calendarios" },
+      { id: "ctos", label: "Ubicación de los cultos", href: "#ubicacion-cultos" },
       { id: "red",  label: "Redes sociales",        href: "#redes" },
       { id: "tpl",  label: "Ubicación del templo",  href: "#ubicacion-templo" },
-      { id: "ctos", label: "Ubicación de los cultos", href: "#ubicacion-cultos" },
       { id: "prop", label: "Propósito",             href: "#proposito" }
     ],
     notifButton: {
@@ -433,77 +433,16 @@ inbox: {
 
   const card=el('div'); card.className='card'; card.style.marginBottom='12px';
   const ifr=el('iframe',{src:cfg.calendars?.google?.embedUrl||'',title:'Calendario Google',loading:'lazy',referrerPolicy:'no-referrer-when-downgrade',height:'600'});
-  card.appendChild(ifr);
-
-  const grid=el('div'); grid.className='grid cols-3';
-  grid.append(
-    el('a',{id:'btn-gcal',className:'btn btn-g',href:'#',textContent:'🟢 Añadir en Google Calendar (Android/PC)'}),
-    el('a',{id:'btn-ios', className:'btn btn-i', href:'#', textContent:'📱 Añadir en Apple Calendar (iPhone/Mac)'}),
-    el('a',{id:'btn-download',className:'btn btn-y',href:'#',textContent:'⬇️ Descargar Google Calendar'})
-  );
-
-  const modal = el('div',{id:'gcal-choice',className:'contact-modal'});
-  modal.innerHTML = `<div class="modal-content">
-    <h3 style="margin:0 0 10px">¿Cómo quieres abrirlo?</h3>
-    <a id="gcal-open-web" class="btn btn-g" href="#">🌐 Abrir en la web</a>
-    <button id="gcal-open-app" class="btn-d">📱 Abrir en la app</button>
-    <button id="gcal-cancel" class="btn-d" style="background:#6b7280">Cancelar</button>
-  </div>`;
-
-  const note = el('p'); note.className='card note'; note.style.marginTop='12px';
+  const note = el('p');
+  note.className='note';
+  note.style.cssText='margin:12px 12px 14px;color:#0b1421;font-weight:600';
   note.textContent='📌 Todo cambio en la programación de la iglesia se reflejará automáticamente en tu calendario.';
+  card.appendChild(ifr);
+  card.appendChild(note);
 
   sec.innerHTML=''; 
-  if (promosWrap) sec.append(h1, promosWrap, card, grid, modal, note);
-  else            sec.append(h1, card, grid, modal, note);
-
-  // Botones calendario
-  (function(){
-    const isIOS=/iPhone|iPad|iPod/i.test(navigator.userAgent);
-    const isAndroid=/Android/i.test(navigator.userAgent);
-    const CAL_ID = cfg.calendars?.google?.calendarId||'';
-    const WEB_URL = (cfg.calendars?.google?.webUrlPrefix||'https://calendar.google.com/calendar/u/0/r?cid=') + encodeURIComponent(CAL_ID);
-    const ICLOUD = cfg.calendars?.icloudWebcal||'';
-
-    $('#btn-ios')?.addEventListener('click', (e)=>{
-      e.preventDefault();
-      if(!ICLOUD) return;
-      const go=url=>{ if(window.self!==window.top && isIOS) window.top.location.href=url; else location.href=url; };
-      go(ICLOUD);
-      setTimeout(()=>alert("Si no se abrió el calendario, copia y pega este enlace en Safari:\n"+ICLOUD),2500);
-    });
-
-    const choice=$('#gcal-choice'), openWeb=$('#gcal-open-web'), openApp=$('#gcal-open-app'), cancel=$('#gcal-cancel');
-    const show=()=>choice&&(choice.style.display='flex'), hide=()=>choice&&(choice.style.display='none');
-    $('#btn-gcal')?.addEventListener('click',e=>{e.preventDefault();show();});
-    cancel?.addEventListener('click',hide);
-    choice?.addEventListener('click',e=>{ if(e.target===choice) hide(); });
-    openWeb?.addEventListener('click',e=>{
-      e.preventDefault(); hide();
-      try{ const w=window.open(WEB_URL,'_blank','noopener'); if(!w) location.href=WEB_URL; }catch(_){ location.href=WEB_URL; }
-    });
-    openApp?.addEventListener('click',e=>{
-      e.preventDefault(); hide();
-      const go=u=>{ if(window.self!==window.top) window.top.location.href=u; else location.href=u; };
-      if(isAndroid){
-        const intent='intent://calendar.google.com/calendar/r?cid='+encodeURIComponent(CAL_ID)+'#Intent;scheme=https;package=com.google.android.calendar;S.browser_fallback_url='+encodeURIComponent(WEB_URL)+';end';
-        let f=false; const fin=()=>{ if(f) return; f=true; clearTimeout(t1); clearTimeout(t2); };
-        go(intent);
-        const onHidden=()=>fin(); window.addEventListener('pagehide',onHidden,{once:true});
-        document.addEventListener('visibilitychange',()=>{ if(document.hidden) fin(); },{once:true});
-        window.addEventListener('blur',onHidden,{once:true});
-        const t1=setTimeout(()=>{ if(!f && !document.hidden) go(WEB_URL); },2200);
-        const t2=setTimeout(()=>{ if(!f && !document.hidden) go('https://play.google.com/store/apps/details?id=com.google.android.calendar'); },4500);
-      }else go(WEB_URL);
-    });
-
-    $('#btn-download')?.addEventListener('click',e=>{
-      e.preventDefault();
-      if(isAndroid) location.href='https://play.google.com/store/apps/details?id=com.google.android.calendar';
-      else if(isIOS) location.href='https://apps.apple.com/app/google-calendar/id909319292';
-      else location.href='https://calendar.google.com/';
-    });
-  })();
+  if (promosWrap) sec.append(h1, promosWrap, card);
+  else            sec.append(h1, card);
 })();
 
 /* ───────── Secciones estáticas: templo+propósito ───────── */
@@ -686,6 +625,11 @@ inbox: {
             </div>
           </div>
         </div>`;
+      // Reubicar sección de cultos antes de redes sociales
+      const redes = $('#redes');
+      if (redes && cultos.parentElement){
+        cultos.parentElement.insertBefore(cultos, redes);
+      }
 
       const tIframe = $('#ubicacion-cultos .grid.cols-2 > div:nth-child(1) iframe');
       const wIframe = $('#ubicacion-cultos .grid.cols-2 > div:nth-child(2) iframe');
@@ -1297,33 +1241,10 @@ function stepsFor(platform){
 
   // ✅ Indicador visual (✅/❌) sin mensajes técnicos
   function ensureTokenIndicator(btn){
-    if(!btn) return null;
-    let ind = document.getElementById('fcm-token-indicator');
-    if(ind) return ind;
-
-    ind = document.createElement('span');
-    ind.id = 'fcm-token-indicator';
-    ind.style.cssText = `
-      margin-left:8px;
-      font:900 14px/1 system-ui,-apple-system,Segoe UI,Roboto,Arial;
-      display:inline-block;
-      vertical-align:middle;
-    `;
-    btn.insertAdjacentElement('afterend', ind);
-    return ind;
+    return null;
   }
   function setIndicator(ind, state){
-    if(!ind) return;
-    if(state === 'ok'){
-      ind.textContent = '✅';
-      ind.title = 'Token confirmado';
-    }else if(state === 'bad'){
-      ind.textContent = '❌';
-      ind.title = 'Token no confirmado';
-    }else{
-      ind.textContent = '';
-      ind.title = '';
-    }
+    return;
   }
 
   async function guardarTokenFCM(token){
